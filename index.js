@@ -42,45 +42,51 @@ async function startSock() {
 
             if (connection === 'close') {
                 let reason = lastDisconnect?.error?.output?.statusCode;
-                if (reason === DisconnectReason.badSession) {
-                    console.log(
-                    `Bad Session File, Going to logout and delete session and scan again.`
-                    );
-                    sock.logout();
-                    deleteSession();
-                    return;
-                } else if (reason === DisconnectReason.connectionClosed) {
-                    console.log("Connection closed, reconnecting....");
+                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
+                if(shouldReconnect) {
                     startSock();
-                } else if (reason === DisconnectReason.connectionLost) {
-                    console.log("Connection lost from server, reconnecting...");
-                    startSock();
-                } else if (reason === DisconnectReason.connectionReplaced) {
-                    console.log(
-                        "Connection replaced, another new session opened, please close the current session first"
-                    );
-                    sock.logout();
+                }else {
                     deleteSession();
-                    return;
-                } else if (reason === DisconnectReason.loggedOut) {
-                    console.log(
-                        `Device closed, please delete session and scan again.`
-                    );
-                    // sock.logout();
-                    deleteSession();
-                    return;
-                } else if (reason === DisconnectReason.restartRequired) {
-                    console.log("Restart required, restarting...");
-                    startSock();
-                } else if (reason === DisconnectReason.timedOut) {
-                    console.log("Connection timed out, reconnecting...");
-                    startSock();
-                } else {
-                    deleteSession();
-                    sock.end(
-                    `Unknown disconnection reason: ${reason}|${lastDisconnect.error}`
-                    );
                 }
+                // if (reason === DisconnectReason.badSession) {
+                //     console.log(
+                //     `Bad Session File, Going to logout and delete session and scan again.`
+                //     );
+                //     sock.logout();
+                //     deleteSession();
+                //     return;
+                // } else if (reason === DisconnectReason.connectionClosed) {
+                //     console.log("Connection closed, reconnecting....");
+                //     startSock();
+                // } else if (reason === DisconnectReason.connectionLost) {
+                //     console.log("Connection lost from server, reconnecting...");
+                //     startSock();
+                // } else if (reason === DisconnectReason.connectionReplaced) {
+                //     console.log(
+                //         "Connection replaced, another new session opened, please close the current session first"
+                //     );
+                //     sock.logout();
+                //     deleteSession();
+                //     return;
+                // } else if (reason === DisconnectReason.loggedOut) {
+                //     console.log(
+                //         `Device closed, please delete session and scan again.`
+                //     );
+                //     // sock.logout();
+                //     deleteSession();
+                //     return;
+                // } else if (reason === DisconnectReason.restartRequired) {
+                //     console.log("Restart required, restarting...");
+                //     startSock();
+                // } else if (reason === DisconnectReason.timedOut) {
+                //     console.log("Connection timed out, reconnecting...");
+                //     startSock();
+                // } else {
+                //     deleteSession();
+                //     sock.end(
+                //     `Unknown disconnection reason: ${reason}|${lastDisconnect.error}`
+                //     );
+                // }
             }
         });
 
