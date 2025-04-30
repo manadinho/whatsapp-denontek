@@ -175,7 +175,7 @@ app.post('/webhook', async(req, res) => {
     const { trackingNumber, orderReferenceNumber, statusUpdateDatetime, orderStatus } = req.body;
 
     // check if the orderStatus is in the list of statuses
-    if(['PostEx WareHouse', 'Out For Delivery', 'Attempted', 'Delivered'].includes(orderStatus)) {
+    if(!['PostEx WareHouse', 'Out For Delivery', 'Attempted', 'Delivered'].includes(orderStatus)) {
         res.status(200).send('Webhook received');
     }
 
@@ -223,7 +223,7 @@ app.post('/webhook', async(req, res) => {
 
     const { icon = "📦", desc = "Your parcel status is being updated." } = statusMessages[orderStatus] || {};
 
-    const message = `📦 Parcel Tracking Update
+    const message = `${icon} Parcel Tracking Update
 
     🧾 Order Ref: ${orderReferenceNumber}
     🔢 Tracking Number: ${trackingNumber}
@@ -234,6 +234,11 @@ app.post('/webhook', async(req, res) => {
 
     Thank you for your patience and for shopping with us!`;
     await sock.sendMessage(numberToSend, { text: message });
+    
+    // send this tracking details to Farhan as well.
+    if(needToSendFarhan) {
+        await sock.sendMessage('923367674817@s.whatsapp.net', { text: message });
+    }
 
     // You can add your own logic here (e.g., verify signature, store data)
 
