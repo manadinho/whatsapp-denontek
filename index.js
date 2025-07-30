@@ -179,6 +179,10 @@ app.post('/webhook', async(req, res) => {
         res.status(200).send('Webhook received');
     }
 
+    if(orderStatus.includes('En-Route to {14} warehouse')) {
+        res.status(200).send('Webhook received');
+    }
+
 
     let numberToSend = '923344778077';
     let needToSendFarhan = false;
@@ -280,6 +284,5 @@ if (fs.existsSync(sessionPath)) {
 }
 
 app.listen(3100, () => {
-    console.log('🚀 Server running at http://localhost:3000');
+    console.log('🚀 Server running at http://localhost:3100');
 });
-
