@@ -10,6 +10,8 @@ const fs = require('fs');
 const path = require('path');
 
 const sessionPath = path.join(__dirname, 'auth_info_baileys');
+const rules = JSON.parse(fs.readFileSync(path.join(__dirname, 'rules.json')));
+const citiesText = fs.readFileSync(path.join(__dirname, 'cities.txt'), 'utf-8');
 
 let sock;
 let isConnected = false;
@@ -92,7 +94,72 @@ async function startSock() {
 
         // incoming message handler
         sock.ev.on('messages.upsert', async (m) => {
-            // nothing
+            if (m.type !== 'notify') return;
+            const msg = m.messages[0];
+
+
+            // ⏱️ Filter out old messages (e.g., older than 60 seconds)
+            const now = Date.now();
+            const messageTimestamp = msg.messageTimestamp * 1000; // convert to ms
+            if ((now - messageTimestamp) > 60 * 1000) {
+                console.log('⏳ Ignored old message:', new Date(messageTimestamp));
+                return;
+            }
+
+            const sender = msg.key.remoteJid;
+            const messageType = Object.keys(msg.message)[0];
+
+            let text = '';
+            
+            if (messageType === 'conversation') {
+                text = msg.message.conversation;
+            } else if (messageType === 'extendedTextMessage') {
+                text = msg.message.extendedTextMessage.text;
+            }
+
+            // Ignore system messages and messages sent by yourself
+            if (!msg.message || msg.key.fromMe) return;
+
+            console.log('📩 From:', sender);
+            console.log('💬 Text:', text);
+
+            // Look for matching rule
+            const matchedRule = rules.find(rule =>
+                rule.RuleStatus === true &&
+                rule.Operand === '=' &&
+                rule.RuleKeyword === text
+            );
+
+            if (matchedRule) {
+                // mark as seen
+                await sock.readMessages([msg.key]);
+
+                console.log(`📜 Matched rule: ${matchedRule.RuleName}`);
+                
+                await sock.sendPresenceUpdate('composing', sender); // send typing indicator
+                await sleep(3000); // simulate typing delay
+                await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+
+                await sock.sendMessage(sender, {
+                    text: matchedRule.RuleMessage
+                });
+            }
+
+            // special case for city names
+            if(text.toLowerCase() == "cities list") {
+                // mark as seen
+                await sock.readMessages([msg.key]);
+
+                await sock.sendPresenceUpdate('composing', sender); // send typing indicator
+                await sleep(3000); // simulate typing delay
+                await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+
+                await sock.sendMessage(sender, {
+                    text: `📍 *List of Cities:*\n\n${citiesText.trim()}`
+                });
+            }
+
+            // IN FUTURE WE CAN DEFINE MULTIPLE RULES FOR LIKE ETC.
         });
     });
 }
@@ -272,6 +339,10 @@ app.post('/send', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+function sleep(time = 2000) {
+    return new Promise((resolve) => setTimeout(resolve, time));
+}
 
 
 if (fs.existsSync(sessionPath)) {
