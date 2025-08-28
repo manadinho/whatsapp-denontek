@@ -189,6 +189,61 @@ app.get('/status', (req, res) => {
     });
 });
 
+app.post('/send-custom', async (req, res) => {
+    // check headers for x-api-key
+    const apiKey = req.headers['x-den-api-key'];
+    if (apiKey !== "denapi4568") {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    const { number, type } = req.body;
+
+    if(!type) {
+        return res.json({ success: false, message: 'Missing type' });
+    }
+
+    // currently we are going to handle marketing type only
+    if(type !== 'marketing') {
+        return res.json({ success: false, message: 'Invalid type' });
+    }
+
+    if (!isConnected || !sock) {
+        return res.json({ success: false, message: 'WhatsApp is not connected' });
+    }
+
+    if (!number) {
+        return res.json({ success: false, message: 'Missing number' });
+    }
+
+    const jid = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+    try {
+        if(type === 'marketing') {
+            // send image with caption
+            const caption =
+                    "🔔 *DenonTek – Automatic School Bell System* 🔔\n\n" +
+                    "Introducing our **WiFi-enabled bell controller** made for schools in Pakistan. 🇵🇰\n\n" +
+                    "✅ 100+ Alarms | ✅ Morning & Evening Shifts\n" +
+                    "✅ Accurate Timing | ✅ 1-Year Warranty\n" +
+                    "✅ Plug & Play\n\n" +
+                    "📍 *Apna city name bhejein aur janen aap ke sheher mein kon kon se schools yeh system use kar rahay hain.*\n\n" +
+                    "📲 WhatsApp for orders: 03344778077\n\n" +
+                    "Reply *STOP* to unsubscribe.";
+            await sock.sendMessage(jid, {
+                image: { url: 'http://denontek.com.pk/image/catalog/new_logo_2.jpg' },
+                caption
+            });
+
+            return res.json({ success: true, message: 'Message sent' });
+        }
+
+        return res.json({ success: false, message: 'Unhandled type' });
+    } catch (err) {
+        console.error('❌ Send error:', err);
+        return res.json({ success: false, message: err.message });
+    }
+
+})
+
 
 
 // Start session and return QR
