@@ -11,6 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.18",
+    "axios": "^1.12.1",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0"
   }
 }

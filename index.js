@@ -1,6 +1,9 @@
+require('dotenv').config();
 const express = require('express');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 global.crypto = require('crypto').webcrypto;
+const axios = require('axios');
+const https = require('https');
 
 
 const app = express();
@@ -13,8 +16,17 @@ const sessionPath = path.join(__dirname, 'auth_info_baileys');
 const rules = JSON.parse(fs.readFileSync(path.join(__dirname, 'rules.json')));
 const citiesText = fs.readFileSync(path.join(__dirname, 'cities.txt'), 'utf-8');
 
+// CHECK_NUMBER rule is to check all inquiries against a number
+const customRules = ['i1', 'i2', 's1', '???'];
+const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940']; // without @s.whatsapp.net
+
 let sock;
 let isConnected = false;
+
+const PORT = process.env.PORT || 3000;
+const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
+const SERVER_BASE_URL = "http://staging.denontek.com.pk";
+const DEN_API_KEY = "denapi4568";
 
 // Create WhatsApp connection
 async function startSock() {
@@ -116,6 +128,51 @@ async function startSock() {
             } else if (messageType === 'extendedTextMessage') {
                 text = msg.message.extendedTextMessage.text;
             }
+
+            // checking custom rules //
+            const textParts = text.split(' ');
+            const textFirstValue = textParts[0].trim().toLowerCase();
+            if(customRules.includes(textFirstValue)) {
+                await sock.readMessages([msg.key]);
+                await sock.sendPresenceUpdate('composing', sender); // send typing indicator
+
+                if(textFirstValue === '???') {
+                    const helpText = `*Available Commands:*\n\n` +
+                    `1. *i1* - Get today's inquiries submitted by you.\n` +
+                    `   _Example:_ TODAY_INQUIRIES\n\n` +
+                    `2. *i2 <NUMBER>* - Check inquiries against a specific number.\n` +
+                    `   _Example:_ CHECK_NUMBER\\n03001234567\n\n` +
+                    `3. *???* - Display this help message.\n\n` +
+                    `*Note:* Please ensure to use the exact command format as shown above.`;
+                    await sock.sendMessage(sender, { text: helpText });
+                }
+
+                if(textFirstValue === 'i2') {
+                    console.log('📞 CHECK_NUMBER rule triggered', textParts[1]);
+                }
+
+                if(textFirstValue === 'i1') {
+                    const payload = new URLSearchParams();
+                    payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
+                    payload.append("type", "TODAY_INQUIRIES");
+                    // payload.append("data", JSON.stringify({}));
+                    const endpoint = 'den-inquiry/api-send-message';
+                    await makeServerPostApiCall(payload, endpoint);
+                }
+
+                if(textFirstValue === 's1') {
+                    let senderNumber = sender.replace('@s.whatsapp.net', '');
+                    if(ADMINS_NUMBERS.includes(senderNumber)) {
+                        const endpoint = 'den-inquiry/daily-sale-statistics';
+                        await makeServerGetApiCall(endpoint);
+                    }
+                }
+
+                await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+            }
+
+
+
 
             // Ignore system messages and messages sent by yourself
             if (!msg.message || msg.key.fromMe) return;
@@ -399,6 +456,92 @@ function sleep(time = 2000) {
     return new Promise((resolve) => setTimeout(resolve, time));
 }
 
+async function makeServerPostApiCall(payload = {}, enpoint = '') {
+    try {
+        // API endpoint (start with https)
+        let url = `${SERVER_BASE_SECURE_URL}/${enpoint}`;
+        console.log("🌐 Making API call to:", url);
+
+        // Ignore SSL errors (expired/self-signed certs)
+        const httpsAgent = new https.Agent({  
+            rejectUnauthorized: false  
+        });
+
+        const response = await axios.post(url, payload, {
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "x-den-api-key": DEN_API_KEY
+            },
+            httpsAgent
+        });
+
+        console.log("✅ API response:", response.data);
+
+    } catch (error) {
+        console.error("❌ API error:", error.message);
+
+        // fallback: if HTTPS fails, try HTTP
+        try {
+            const fallbackUrl = `${SERVER_BASE_URL}/${enpoint}`;
+            console.log("ℹ️ Attempting fallback to HTTP:", fallbackUrl);
+            const response = await axios.post(fallbackUrl, payload, {
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "x-den-api-key": DEN_API_KEY
+                }
+            });
+
+            console.log("✅ Fallback (HTTP) response:", response.data);
+
+        } catch (fallbackError) {
+            console.error("❌ Fallback HTTP error:", fallbackError.message);
+        }
+    }
+}
+
+async function makeServerGetApiCall(endpoint = '') {
+    try {
+        // API endpoint (start with https)
+        let url = `${SERVER_BASE_SECURE_URL}/${endpoint}`;
+        console.log("🌐 Making API call to:", url);
+
+        // Ignore SSL errors (expired/self-signed certs)
+        const httpsAgent = new https.Agent({  
+            rejectUnauthorized: false  
+        });
+
+        const response = await axios.get(url, {
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "x-den-api-key": DEN_API_KEY
+            },
+            httpsAgent
+        });
+
+        console.log("✅ API response:", response.data);
+
+    } catch (error) {
+        console.error("❌ API error:", error.message);
+
+        // fallback: if HTTPS fails, try HTTP
+        try {
+            const fallbackUrl = `${SERVER_BASE_URL}/${endpoint}`;
+            console.log("ℹ️ Attempting fallback to HTTP:", fallbackUrl);
+            const response = await axios.get(fallbackUrl, {
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "x-den-api-key": DEN_API_KEY
+                }
+            });
+
+            console.log("✅ Fallback (HTTP) response:", response.data);
+
+        } catch (fallbackError) {
+            console.error("❌ Fallback HTTP error:", fallbackError.message);
+        }
+    }
+}
+
 
 if (fs.existsSync(sessionPath)) {
     console.log('🔍 Existing WhatsApp session found. Attempting to reconnect...');
@@ -409,6 +552,6 @@ if (fs.existsSync(sessionPath)) {
     console.log('ℹ️ No previous session found. Waiting for QR request...');
 }
 
-app.listen(3100, () => {
-    console.log('🚀 Server running at http://localhost:3100');
+app.listen(PORT, () => {
+    console.log('🚀 Server running at http://localhost:'+PORT);
 });
