@@ -4,7 +4,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 global.crypto = require('crypto').webcrypto;
 const axios = require('axios');
 const https = require('https');
-
+const http = require('http');
 
 const app = express();
 app.use(express.json());
@@ -149,13 +149,19 @@ async function startSock() {
 
                 if(textFirstValue === 'i2') {
                     console.log('📞 CHECK_NUMBER rule triggered', textParts[1]);
+                    const payload = new URLSearchParams();
+                    payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
+                    payload.append("type", "CHECK_NUMBER");
+                    payload.append("data", [textParts[1]]);
+                    const endpoint = 'den-inquiry/api-send-message';
+                    await makeServerPostApiCall(payload, endpoint);
                 }
 
                 if(textFirstValue === 'i1') {
                     const payload = new URLSearchParams();
                     payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
                     payload.append("type", "TODAY_INQUIRIES");
-                    // payload.append("data", JSON.stringify({}));
+                    // payload.append("data", []); // Adding an empty array for consistency
                     const endpoint = 'den-inquiry/api-send-message';
                     await makeServerPostApiCall(payload, endpoint);
                 }
@@ -169,6 +175,52 @@ async function startSock() {
                 }
 
                 await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+            }
+
+            // check is this first message comming from FB ads click to WhatsApp
+            if (text === 'Hello! Can I get more info on this?') {
+                await sock.readMessages([msg.key]);
+                await sock.sendPresenceUpdate('composing', sender); // send typing indicator
+                const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/10600.jpeg';
+                const secondImageUrl = 'https://staging.denontek.com.pk/public/images/13200.jpeg';
+                const thirdImageUrl  = 'https://staging.denontek.com.pk/public/images/14200.jpeg';
+              
+                // fetch in parallel
+                const [firstImageBuffer, secondImageBuffer, thirdImageBuffer] =
+                  await Promise.all([
+                    fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://')),
+                    fetchImageBuffer(secondImageUrl, secondImageUrl.replace(/^https:\/\//i, 'http://')),
+                    fetchImageBuffer(thirdImageUrl, thirdImageUrl.replace(/^https:\/\//i, 'http://')),
+                  ]);
+              
+                // if any failed, exit silently
+                if (!firstImageBuffer || !secondImageBuffer || !thirdImageBuffer) {
+                    await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+                    return;
+                }
+              
+                // try sending; if any send fails, stop silently
+                try {
+                  await sock.sendMessage(sender, {
+                    image: firstImageBuffer,
+                    mimetype: 'image/jpeg',
+                    caption: 'Rs 10600/-',
+                  });
+                  await sock.sendMessage(sender, {
+                    image: secondImageBuffer,
+                    mimetype: 'image/jpeg',
+                    caption: 'Rs 13200/-',
+                  });
+                  await sock.sendMessage(sender, {
+                    image: thirdImageBuffer,
+                    mimetype: 'image/jpeg',
+                    caption: 'Rs 14200/-',
+                  });
+                  await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+                } catch {
+                    await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+                    return;
+                }
             }
 
 
@@ -541,6 +593,36 @@ async function makeServerGetApiCall(endpoint = '') {
         }
     }
 }
+
+const fetchImageBuffer = async (secureUrl, url) => {
+    // 1) Try HTTPS, ignoring bad certs
+    try {
+      const res = await axios.get(secureUrl, {
+        responseType: 'arraybuffer',
+        headers: { Accept: 'image/*' },
+        timeout: 10000,
+        maxRedirects: 3,
+        validateStatus: (s) => s >= 200 && s < 300,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false }),          // <-- critical difference
+      });
+      return Buffer.from(res.data);
+    } catch (_) {
+      // 2) Fallback to HTTP
+      try {
+        const res = await axios.get(url, {
+          responseType: 'arraybuffer',
+          headers: { Accept: 'image/*' },
+          timeout: 10000,
+          maxRedirects: 3,
+          validateStatus: (s) => s >= 200 && s < 300,
+          httpAgent: new http.Agent({ keepAlive: true }),
+        });
+        return Buffer.from(res.data);
+      } catch (_) {
+        return null; // stay silent on failure
+      }
+    }
+};
 
 
 if (fs.existsSync(sessionPath)) {
