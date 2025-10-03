@@ -212,11 +212,13 @@ async function startSock() {
                     }
 
                     // prepare and send a message about total numbers in current campaign and when it started and how many are successful and failed
-                    let durationHHMMSS = formatDuration(Date.now() - campaignStartedAt);
+                    const endedAt = Date.now();
+                    const durationMs = endedAt - campaignStartedAt;
+                    const durationHuman = humanizeDuration(durationMs); // e.g., "1 hour 5 minutes"
                     let message = `*Campaign Status*\n\n` +
                                   `Status: ${campaignStatus}\n` +
                                   `Started At: ${new Date(campaignStartedAt).toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}\n` +
-                                  `Duration: ${durationHHMMSS}\n` +
+                                  `Duration: ${durationHuman}\n` +
                                   `Successful: ${campaignSuccessCount}\n` +
                                   `Failed: ${campaignFailureCount}\n\n` +
                                   `You will receive a summary once the campaign is completed.`;
@@ -654,14 +656,15 @@ async function manageCampaign(phone_numbers = []) {
     }
 
     const endedAt = Date.now();
-    const durationHHMMSS = formatDuration(endedAt - campaignStartedAt);
+    const durationMs = endedAt - campaignStartedAt;
+    const durationHuman = humanizeDuration(durationMs); // e.g., "1 hour 5 minutes"
 
     // write a summary message to send admins
     let summaryMessage = `*Campaign Summary*\n\n` +
         `Total Numbers: ${phone_numbers.length}\n` +
         `Successful: ${campaignSuccessCount}\n` +
         `Failed: ${campaignFailureCount}\n` +
-        `Time to complete: ${durationHHMMSS}\n\n`;
+        `Time to complete: ${durationHuman}\n\n`;
     
     await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });   
     await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: summaryMessage });   
@@ -680,13 +683,28 @@ async function manageCampaign(phone_numbers = []) {
     resetCampaignVariables();
 }
 
-function formatDuration(ms) {
-    const total = Math.floor(ms / 1000);
-    const h = String(Math.floor(total / 3600)).padStart(2, '0');
-    const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
-    const s = String(total % 60).padStart(2, '0');
-    return `${h}:${m}:${s}`;
-}
+function humanizeDuration(ms, { maxUnits = 2 } = {}) {
+    if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  
+    let seconds = Math.floor(ms / 1000);
+    const days = Math.floor(seconds / 86400);  seconds %= 86400;
+    const hours = Math.floor(seconds / 3600);  seconds %= 3600;
+    const minutes = Math.floor(seconds / 60);  seconds %= 60;
+  
+    const parts = [];
+    const push = (v, label) => v > 0 && parts.push(`${v} ${label}${v === 1 ? '' : 's'}`);
+  
+    push(days, 'day');
+    push(hours, 'hour');
+    push(minutes, 'minute');
+    push(seconds, 'second');
+  
+    if (parts.length === 0) return '0 seconds';
+  
+    // keep only the most significant units (e.g., "1 hour 5 minutes")
+    const top = parts.slice(0, maxUnits);
+    return top.length === 1 ? top[0] : `${top.slice(0, -1).join(' ')} ${top.length > 1 ? '' : ''}${top.length > 1 ? top.slice(-1) : ''}`.trim() || top.join(' ');
+  }
 
 function sleep(time = 2000) {
     return new Promise((resolve) => setTimeout(resolve, time));
