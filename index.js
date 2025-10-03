@@ -622,7 +622,7 @@ async function manageCampaign(phone_numbers = []) {
 
         // reset campaign variables
         resetCampaignVariables();
-        
+
         campaignStartedAt = Date.now();
         campaignStatus = 'in_progress';
 
@@ -665,7 +665,7 @@ async function manageCampaign(phone_numbers = []) {
         `Total Numbers: ${phone_numbers.length}\n` +
         `Successful: ${campaignSuccessCount}\n` +
         `Failed: ${campaignFailureCount}\n` +
-        `Time to complete: ${durationHuman}\n\n`;
+        `Duration: ${durationHuman}\n\n`;
     
     await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });   
     await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: summaryMessage });   
