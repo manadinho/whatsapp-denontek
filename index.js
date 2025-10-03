@@ -17,7 +17,7 @@ const rules = JSON.parse(fs.readFileSync(path.join(__dirname, 'rules.json')));
 const citiesText = fs.readFileSync(path.join(__dirname, 'cities.txt'), 'utf-8');
 
 // CHECK_NUMBER rule is to check all inquiries against a number
-const customRules = ['i1', 'i2', 's1', 'c1', 'c2', '???']; // c1 means start campaign this is for Farahan only
+const customRules = ['i1', 'i2', 's1', 'c1', 'c2', 'c3', '???']; // c1 means start campaign this is for Farahan only
 const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940', '923176063820']; // without @s.whatsapp.net
 
 let sock;
@@ -223,6 +223,18 @@ async function startSock() {
 
                     await sock.sendMessage(sender, { text: message });
                     await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+                    return;
+                }
+
+                if(textFirstValue === 'c3') {
+                    if(campaignStatus !== 'in_progress') {
+                        await sock.sendMessage(sender, { text: '❌ No Campaign is running at the moment.' });
+                        await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+                        return;
+                    }
+                    
+                    campaignStatus = 'not_started'; // this will stop the campaign after current number is processed
+                    await sock.sendMessage(sender, { text: '🛑 Campaign stop request received. The campaign will stop shortly.' });
                     return;
                 }
 
@@ -597,16 +609,26 @@ async function manageCampaign(phone_numbers = []) {
         const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/campaign.jpeg';
         const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
 
-        const message = "🔔 *DenonTek – Automatic School Bell System* 🔔\n\n" +
-                "Introducing our **WiFi-enabled bell controller** made for schools in Pakistan. 🇵🇰\n\n" +
-                "✅ 100+ Alarms | ✅ Morning & Evening Shifts\n" +
-                "✅ Accurate Timing | ✅ 1-Year Warranty\n" +
-                "✅ Plug & Play\n\n" +
+        const message = "📢 *DENONTEK Automatic School Bell System*\n\n" +
+                "✅ No Wi-Fi, No Internet Required\n" +
+                "✅ Built-in Hotspot — connect directly with your mobile\n" +
+                "✅ Simple & secure connection\n" +
+                "✅ Best for Schools, Colleges & Madaris\n" +
+                "✅ Easy setup with warranty support\n\n" +
                 "📍 *Apna city name bhejein aur janen aap ke sheher mein kon kon se schools yeh system use kar rahay hain.*\n\n" +
                 "📲 WhatsApp for orders: 03176063820\n\n" +
                 "Reply *STOP* to unsubscribe.";
         
+
+        // reset campaign variables
+        resetCampaignVariables();
+
         for(let i = 0; i < phone_numbers.length; i++) {
+            if(campaignStatus !== 'in_progress') {
+                console.log('🛑 Campaign stopped by admin request.');
+                break;
+            }
+            
             const participant = phone_numbers[i];
             try {
                 
@@ -624,42 +646,38 @@ async function manageCampaign(phone_numbers = []) {
                 continue;
             }
         }
-
-        const endedAt = Date.now();
-        const durationHHMMSS = formatDuration(endedAt - campaignStartedAt);
-
-        // write a summary message to send admins
-        let summaryMessage = `*Campaign Summary*\n\n` +
-            `Total Numbers: ${phone_numbers.length}\n` +
-            `Successful: ${campaignSuccessCount}\n` +
-            `Failed: ${campaignFailureCount}\n`
-            `Time to complete: ${durationHHMMSS}\n\n`;
-        
-        await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });   
-        await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: summaryMessage });   
-        await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: summaryMessage });
-        await sock.sendMessage(`923367674817@s.whatsapp.net`, { text: summaryMessage });
-
-        // reset campaign variables
-        resetCampaignVariables();
-
-        const payload = new URLSearchParams();
-        // add success and failure array to payload
-        payload.append("success_numbers", JSON.stringify(campaignSuccessNumbers));
-        payload.append("failure_numbers", JSON.stringify(campaignFailureNumbers));
-        payload.append("success_count", campaignSuccessCount);
-        payload.append("failure_count", campaignFailureCount);
-        // payload.append("data", []); // Adding an empty array for consistency
-        const endpoint = 'den-campaigns/mark-completed';
-        await makeServerPostApiCall(payload, endpoint);
-        
     } catch (err) {
-        resetCampaignVariables();
         await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
         await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
         await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
         console.error('❌ Send error:', err);
     }
+
+    const endedAt = Date.now();
+    const durationHHMMSS = formatDuration(endedAt - campaignStartedAt);
+
+    // write a summary message to send admins
+    let summaryMessage = `*Campaign Summary*\n\n` +
+        `Total Numbers: ${phone_numbers.length}\n` +
+        `Successful: ${campaignSuccessCount}\n` +
+        `Failed: ${campaignFailureCount}\n`
+        `Time to complete: ${durationHHMMSS}\n\n`;
+    
+    await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });   
+    await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: summaryMessage });   
+    await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: summaryMessage });
+    await sock.sendMessage(`923367674817@s.whatsapp.net`, { text: summaryMessage });
+
+    const payload = new URLSearchParams();
+    // add success and failure array to payload
+    payload.append("success_numbers", JSON.stringify(campaignSuccessNumbers));
+    payload.append("failure_numbers", JSON.stringify(campaignFailureNumbers));
+    payload.append("success_count", campaignSuccessCount);
+    payload.append("failure_count", campaignFailureCount);
+    // payload.append("data", []); // Adding an empty array for consistency
+    const endpoint = 'den-campaigns/mark-completed';
+    await makeServerPostApiCall(payload, endpoint);
+    resetCampaignVariables();
 }
 
 function formatDuration(ms) {
