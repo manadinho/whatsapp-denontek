@@ -17,7 +17,7 @@ const rules = JSON.parse(fs.readFileSync(path.join(__dirname, 'rules.json')));
 const citiesText = fs.readFileSync(path.join(__dirname, 'cities.txt'), 'utf-8');
 
 // CHECK_NUMBER rule is to check all inquiries against a number
-const customRules = ['i1', 'i2', 's1', 'c1', '???']; // c1 means start campaign this is for Farahan only
+const customRules = ['i1', 'i2', 's1', 'c1', 'c2', '???']; // c1 means start campaign this is for Farahan only
 const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940', '923176063820']; // without @s.whatsapp.net
 
 let sock;
