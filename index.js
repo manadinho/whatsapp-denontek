@@ -548,7 +548,7 @@ app.post('/start-campaign', async (req, res) => {
     await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: message });
     await sock.sendMessage(`923367674817@s.whatsapp.net`, { text: message });
     
-    manageCampaign(phone_numbers);
+    await manageCampaign(phone_numbers);
     return res.json({ success: true, message: 'Campaign started' });
 
 
