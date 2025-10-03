@@ -229,8 +229,6 @@ async function startSock() {
                 }
 
                 if(textFirstValue === 'c3') {
-                    console.log('===message===', text);
-                    console.log('===textFirstValue===', textFirstValue);
                     if(campaignStatus !== 'in_progress') {
                         await sock.sendMessage(sender, { text: '❌ No Campaign is running at the moment.' });
                         await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
@@ -606,8 +604,6 @@ app.post('/start-campaign', async (req, res) => {
 })
 
 async function manageCampaign(phone_numbers = []) {
-    campaignStartedAt = Date.now();
-    campaignStatus = 'in_progress';
 
     try {
         const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/campaign.jpeg';
@@ -626,6 +622,9 @@ async function manageCampaign(phone_numbers = []) {
 
         // reset campaign variables
         resetCampaignVariables();
+        
+        campaignStartedAt = Date.now();
+        campaignStatus = 'in_progress';
 
         for(let i = 0; i < phone_numbers.length; i++) {
             if(campaignStatus !== 'in_progress') {
