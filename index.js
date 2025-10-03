@@ -559,13 +559,13 @@ async function manageCampaign(phone_numbers = []) {
         const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/campaign.jpeg';
         const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
 
-        const message = "🔔 *DenonTek – xAutomatic School Bell System* 🔔\n\n" +
+        const message = "🔔 *DenonTek – Automatic School Bell System* 🔔\n\n" +
                 "Introducing our **WiFi-enabled bell controller** made for schools in Pakistan. 🇵🇰\n\n" +
                 "✅ 100+ Alarms | ✅ Morning & Evening Shifts\n" +
                 "✅ Accurate Timing | ✅ 1-Year Warranty\n" +
                 "✅ Plug & Play\n\n" +
                 "📍 *Apna city name bhejein aur janen aap ke sheher mein kon kon se schools yeh system use kar rahay hain.*\n\n" +
-                "📲 WhatsApp for orders: 03008620417\n\n" +
+                "📲 WhatsApp for orders: 03176063820\n\n" +
                 "Reply *STOP* to unsubscribe.";
         // manage success and failure count and mantain list of those numbers
         const successNumbers = [];
@@ -577,7 +577,7 @@ async function manageCampaign(phone_numbers = []) {
             const participant = phone_numbers[i];
             try {
                 
-                sendMessage(sock, participant, {caption: message, image: imageBuffer});
+                await sock.sendMessage(participant, {caption: message, image: imageBuffer});
 
                 // dynamic wait 20 to 50 seconds
                 const waitTime = Math.floor(Math.random() * 30) + 20;
