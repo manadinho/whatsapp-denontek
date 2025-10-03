@@ -660,7 +660,7 @@ async function manageCampaign(phone_numbers = []) {
     let summaryMessage = `*Campaign Summary*\n\n` +
         `Total Numbers: ${phone_numbers.length}\n` +
         `Successful: ${campaignSuccessCount}\n` +
-        `Failed: ${campaignFailureCount}\n`
+        `Failed: ${campaignFailureCount}\n` +
         `Time to complete: ${durationHHMMSS}\n\n`;
     
     await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });   
