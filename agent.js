@@ -1,10 +1,17 @@
 require('dotenv').config();
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 global.crypto = require('crypto').webcrypto;
 const axios = require('axios');
 const https = require('https');
 const http = require('http');
+const { spawn, execFile } = require('child_process');
+const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
+const ASSISTANT_ID = process.env.ASSISTANT_ID;
+const OpenAI = require('openai');
+const openai = new OpenAI({
+    apiKey: WHISPER_API_KEY,
+});
 
 const app = express();
 app.use(express.json());
@@ -17,8 +24,8 @@ const rules = JSON.parse(fs.readFileSync(path.join(__dirname, 'rules.json')));
 const citiesText = fs.readFileSync(path.join(__dirname, 'cities.txt'), 'utf-8');
 
 // CHECK_NUMBER rule is to check all inquiries against a number
-const customRules = ['i1', 'i2', 's1', 'c1', '???']; // c1 means start campaign this is for Farahan only
-const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940', '923176063820']; // without @s.whatsapp.net
+const customRules = ['i1', 'i2', 's1', '???'];
+const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940']; // without @s.whatsapp.net
 
 let sock;
 let isConnected = false;
@@ -27,6 +34,9 @@ const PORT = process.env.PORT || 3000;
 const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
 const SERVER_BASE_URL = "http://staging.denontek.com.pk";
 const DEN_API_KEY = "denapi4568";
+
+const CLIENTS = {}
+
 
 // Create WhatsApp connection
 async function startSock() {
@@ -106,6 +116,7 @@ async function startSock() {
 
         // incoming message handler
         sock.ev.on('messages.upsert', async (m) => {
+            let clientFirstMessage = false;
             if (m.type !== 'notify') return;
             const msg = m.messages[0];
 
@@ -119,6 +130,23 @@ async function startSock() {
             }
 
             const sender = msg.key.remoteJid;
+            // check sender is in CLIENTS as key or not
+            // if not then add it and set value to 1
+            // if yes and the value is 0 then return ignore because agent mode is off this client
+            processedSender = sender.replace('@s.whatsapp.net', '')
+
+            if(!(processedSender in CLIENTS)) {
+                if(!ADMINS_NUMBERS.includes(processedSender)) {
+                    CLIENTS[processedSender] = 1;
+                    clientFirstMessage = true;
+                }
+            } else {
+                if(CLIENTS[processedSender] === 0) {
+                    return;
+                }
+            }
+
+
             const messageType = Object.keys(msg.message)[0];
 
             let text = '';
@@ -132,70 +160,78 @@ async function startSock() {
             // checking custom rules //
             const textParts = text.split(' ');
             const textFirstValue = textParts[0].trim().toLowerCase();
-            if(customRules.includes(textFirstValue)) {
-                await sock.readMessages([msg.key]);
-                await sock.sendPresenceUpdate('composing', sender); // send typing indicator
 
-                if(textFirstValue === '???') {
-                    const helpText = `*Available Commands:*\n\n` +
-                    `1. *i1* - Get today's inquiries submitted by you.\n` +
-                    `   _Example:_ TODAY_INQUIRIES\n\n` +
-                    `2. *i2 <NUMBER>* - Check inquiries against a specific number.\n` +
-                    `   _Example:_ CHECK_NUMBER\\n03001234567\n\n` +
-                    `3. *???* - Display this help message.\n\n` +
-                    `*Note:* Please ensure to use the exact command format as shown above.`;
-                    await sock.sendMessage(sender, { text: helpText });
+            if(ADMINS_NUMBERS.includes(processedSender)) {
+                // check if first word is 1 or 0 then set state
+                if (textFirstValue === '1') {
+                    CLIENTS[textParts[1].trim().toLowerCase()] = 1; // set state to active
+                } else if (textFirstValue === '0') {
+                    CLIENTS[textParts[1].trim().toLowerCase()] = 0; // set state to inactive
                 }
-
-                if(textFirstValue === 'i2') {
-                    console.log('📞 CHECK_NUMBER rule triggered', textParts[1]);
-                    const payload = new URLSearchParams();
-                    payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
-                    payload.append("type", "CHECK_NUMBER");
-                    payload.append("data", [textParts[1]]);
-                    const endpoint = 'den-inquiry/api-send-message';
-                    await makeServerPostApiCall(payload, endpoint);
-                }
-
-                if(textFirstValue === 'i1') {
-                    const payload = new URLSearchParams();
-                    payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
-                    payload.append("type", "TODAY_INQUIRIES");
-                    // payload.append("data", []); // Adding an empty array for consistency
-                    const endpoint = 'den-inquiry/api-send-message';
-                    await makeServerPostApiCall(payload, endpoint);
-                }
-
-                if(textFirstValue === 's1') {
-                    let senderNumber = sender.replace('@s.whatsapp.net', '');
-                    if(ADMINS_NUMBERS.includes(senderNumber)) {
-                        const endpoint = 'den-inquiry/daily-sale-statistics';
-                        await makeServerGetApiCall(endpoint);
-                    }
-                }
-
-                // this section is for Farhan only right now
-                if(textFirstValue === 'c1') {
-                    let senderNumber = sender.replace('@s.whatsapp.net', '');
-
-                    if(!ADMINS_NUMBERS.includes(senderNumber)) {
-                        await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
-                        await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
-                        return;
-                    }
-
-                    const endpoint = 'den-campaigns/start';
-                    await makeServerGetApiCall(endpoint);
-                    await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
-                    await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
-                    return;
-                }
-
-                await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
             }
 
+            const messageContent = msg.message;
+            const audioMsg = messageContent?.audioMessage || messageContent?.message?.audioMessage;
+            if(audioMsg) {
+                // 1) download media stream (Baileys helper)
+                const stream = await downloadContentFromMessage(audioMsg, 'audio'); // returns async iterable
+                const oggPath = path.join(__dirname, `wa-${msg.key.id}.ogg`);
+                await streamToFile(stream, oggPath);
+
+                // 2) convert to WAV (16k mono) for best STT compatibility
+                const wavPath = path.join(__dirname, `wa-${msg.key.id}.wav`);
+                await new Promise((resolve, reject) => {
+                    // ffmpeg -i input.ogg -ar 16000 -ac 1 output.wav
+                    const ff = spawn('ffmpeg', ['-y', '-i', oggPath, '-ar', '16000', '-ac', '1', wavPath]);
+                    ff.stderr.on('data', d => {/* optionally log */});
+                    ff.on('exit', code => code === 0 ? resolve() : reject(new Error('ffmpeg failed')));
+                });
+
+                // 3) call OpenAI / Whisper transcription (example)
+                const transcription = await openai.audio.transcriptions.create({
+                    file: fs.createReadStream(wavPath),
+                    model: 'whisper-1'
+                });
+            
+                // 4) reply with the transcript (or store it)
+                text = transcription.text;
+            }
+
+            const thread = await createThread();
+            const threadId = thread.id;
+
+            // get actuall message logic
+            const message = text;
+            await addMessage(threadId, message);
+
+            const run = await runAssistant(threadId);
+            const result = await checkingStatus(threadId, run.id);
+
+            if (result.success) {
+                const messages = result.data;
+                const assistantReply =
+                (Array.isArray(messages) && messages[0] && String(messages[0]).trim()) ||
+                'ٹھیک ہے، میں آپ کی مدد کے لیے موجود ہوں۔';
+                try {
+                    const oggBuffer = await ttsToWhatsAppVoice(assistantReply);
+                
+                    await sock.sendMessage(sender, {
+                        audio: oggBuffer,
+                        mimetype: 'audio/ogg; codecs=opus',
+                        ptt: true,          // show as voice note
+                    });
+                } catch (e) {
+                    console.error('TTS/Send voice failed, falling back to text:', e);
+                    await sock.sendMessage(sender, { text: assistantReply });
+                }
+            } else {
+                console.error('Error checking status:', result.data);
+            }
+
+            
+
             // check is this first message comming from FB ads click to WhatsApp
-            if (text === 'Hello! Can I get more info on this?') {
+            if (text === 'Hello! Can I get more info on this?' && false) { // disabled for now
                 await sock.readMessages([msg.key]);
                 await sock.sendPresenceUpdate('composing', sender); // send typing indicator
                 const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/10600.jpeg';
@@ -249,46 +285,171 @@ async function startSock() {
             console.log('📩 From:', sender);
             console.log('💬 Text:', text);
 
-            // Look for matching rule
-            const matchedRule = rules.find(rule =>
-                rule.RuleStatus === true &&
-                rule.Operand === '=' &&
-                rule.RuleKeyword === text
-            );
-
-            if (matchedRule) {
-                // mark as seen
-                await sock.readMessages([msg.key]);
-
-                console.log(`📜 Matched rule: ${matchedRule.RuleName}`);
-                
-                await sock.sendPresenceUpdate('composing', sender); // send typing indicator
-                await sleep(3000); // simulate typing delay
-                await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
-
-                await sock.sendMessage(sender, {
-                    text: matchedRule.RuleMessage
-                });
-            }
-
-            // special case for city names
-            if(text.toLowerCase() == "cities list") {
-                // mark as seen
-                await sock.readMessages([msg.key]);
-
-                await sock.sendPresenceUpdate('composing', sender); // send typing indicator
-                await sleep(3000); // simulate typing delay
-                await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
-
-                await sock.sendMessage(sender, {
-                    text: `📍 *List of Cities:*\n\n${citiesText.trim()}`
-                });
-            }
-
-            // IN FUTURE WE CAN DEFINE MULTIPLE RULES FOR LIKE ETC.
         });
     });
 }
+
+// helper: save stream -> buffer/file
+async function streamToFile(stream, filePath) {
+    const write = fs.createWriteStream(filePath);
+    for await (const chunk of stream) write.write(chunk);
+    write.end();
+    await new Promise(r => write.on('close', r));
+}
+
+async function createThread() {
+    const thread = await openai.beta.threads.create();
+    return thread;
+}
+
+async function addMessage(threadId, message) {
+    console.log('Adding a new message to thread: ' + threadId);
+    const response = await openai.beta.threads.messages.create(
+        threadId,
+        {
+            role: "user",
+            content: message
+        },
+        instructions= "You are a helpful assistant that responds in Urdu. Please answer in short sentences. at the end we need to create a voice note response so please use simple language and choose those words that are easily convertable to speech."
+    );
+    return response;
+}
+
+async function runAssistant(threadId) {
+    console.log('Running assistant for thread: ' + threadId)
+    const response = await openai.beta.threads.runs.create(
+        threadId,
+        { 
+          assistant_id: ASSISTANT_ID,
+          tools: [{type: "file_search"}],
+          tool_resources: {
+            file_search: {
+              vector_store_ids: ['vs_67f6e283ec2081919013a6f8871472d3']
+            }
+          }
+          // Make sure to not overwrite the original instruction, unless you want to
+        }
+      );
+
+    // console.log(response)
+
+    return response;
+}
+
+async function checkingStatus(threadId, runId) {
+    try {
+        let retries = 20; // max retry attempts
+        let delay = 2000; // wait 2 seconds between retries
+
+        while (retries > 0) {
+            const response = await openai.beta.threads.runs.retrieve(threadId, runId);
+            if (response.status === 'completed') {
+                const messagesList = await openai.beta.threads.messages.list(threadId);
+                let messages = [];
+
+                messagesList.body.data.forEach(message => {
+                    // console role and message
+                    // console.log('Role:', message.role);
+                    // console.log('Message:', message.content);
+                    if (message.role === "assistant") {
+                        const textParts = message.content.filter(c => c.type === 'text');
+                        textParts.forEach(part => messages.push(part.text.value));
+                    }
+                });
+
+                return { success: true, data: messages };
+            } else if (response.status === 'failed') {
+                return { success: false, data: { error: 'Run failed' } };
+            }
+
+            // Wait before checking again
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries--;
+        }
+
+        return { success: false, data: { error: 'Timeout waiting for run to complete' } };
+
+    } catch (err) {
+        return { success: false, data: err };
+    }
+}
+
+async function ttsToWhatsAppVoice(
+    text,
+    {
+      voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM',
+      opusBitrate = '32k',                 // WhatsApp-friendly
+      modelId = 'eleven_multilingual_v2',  // good for Urdu/Punjabi
+    } = {}
+  ) {
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+  
+    // 1) Try to get OGG/Opus directly (best case: no conversion)
+    try {
+      const res = await axios.post(
+        url,
+        { text, model_id: modelId },
+        {
+          headers: {
+            'xi-api-key': process.env.ELEVENLABS_API_KEY,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/ogg', // ask for ogg/opus
+          },
+          responseType: 'arraybuffer',
+          timeout: 60000,
+        }
+      );
+  
+      const contentType = (res.headers['content-type'] || '').toLowerCase();
+      const buf = Buffer.from(res.data);
+  
+      if (contentType.includes('ogg')) {
+        // Great—already OGG/Opus
+        return buf;
+      }
+  
+      // If not OGG, fall through to MP3->OGG conversion
+      await new Promise((_, reject) =>
+        reject(new Error(`Unexpected content-type: ${contentType}`))
+      );
+    } catch (_) {
+      // 2) Fallback: request MP3 and convert with ffmpeg → OGG/Opus
+      const res = await axios.post(
+        url,
+        { text, model_id: modelId },
+        {
+          headers: {
+            'xi-api-key': process.env.ELEVENLABS_API_KEY,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg',
+          },
+          responseType: 'arraybuffer',
+          timeout: 60000,
+        }
+      );
+  
+      const mp3Buf = Buffer.from(res.data);
+      const tmp = path.join(__dirname, `tts-${Date.now()}`);
+      const mp3Path = `${tmp}.mp3`;
+      const oggPath = `${tmp}.ogg`;
+  
+      await fs.promises.writeFile(mp3Path, mp3Buf);
+  
+      await new Promise((resolve, reject) => {
+        execFile(
+          'ffmpeg',
+          ['-y', '-i', mp3Path, '-c:a', 'libopus', '-b:a', opusBitrate, oggPath],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+  
+      const oggBuf = await fs.promises.readFile(oggPath);
+      fs.promises.unlink(mp3Path).catch(() => {});
+      fs.promises.unlink(oggPath).catch(() => {});
+      return oggBuf;
+    }
+}
+  
 
 function deleteSession() {
     isConnected = false;
@@ -520,106 +681,6 @@ app.post('/send', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-app.post('/start-campaign', async (req, res) => {
-    const apiKey = req.headers['x-den-api-key'];
-    if (apiKey !== "denapi4568") {
-        return res.json({ success: false, message: 'Forbidden' });
-    }
-
-    const { phone_numbers } = req.body;
-
-    if(!phone_numbers || !Array.isArray(phone_numbers) || phone_numbers.length === 0) {
-        return res.json({ success: false, message: 'Invalid phone_numbers' });
-    }
-
-    if (!isConnected || !sock) {
-        return res.status(400).json({ error: 'WhatsApp is not connected' });
-    }
-
-    // send message to admins that campaign is started
-    let message = `🚀 *Campaign Started*\n\n` +
-                    `Total Numbers: ${phone_numbers.length}\n` +
-                    `Start Time: ${new Date().toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}\n\n` +
-                    `You will receive a summary once the campaign is completed.`;
-        
-    await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: message });   
-    await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: message });   
-    await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: message });
-    await sock.sendMessage(`923367674817@s.whatsapp.net`, { text: message });
-    
-    manageCampaign(phone_numbers);
-    return res.json({ success: true, message: 'Campaign started' });
-
-
-})
-
-async function manageCampaign(phone_numbers = []) {
-    try {
-        const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/campaign.jpeg';
-        const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
-
-        const message = "🔔 *DenonTek – xAutomatic School Bell System* 🔔\n\n" +
-                "Introducing our **WiFi-enabled bell controller** made for schools in Pakistan. 🇵🇰\n\n" +
-                "✅ 100+ Alarms | ✅ Morning & Evening Shifts\n" +
-                "✅ Accurate Timing | ✅ 1-Year Warranty\n" +
-                "✅ Plug & Play\n\n" +
-                "📍 *Apna city name bhejein aur janen aap ke sheher mein kon kon se schools yeh system use kar rahay hain.*\n\n" +
-                "📲 WhatsApp for orders: 03008620417\n\n" +
-                "Reply *STOP* to unsubscribe.";
-        // manage success and failure count and mantain list of those numbers
-        const successNumbers = [];
-        const failureNumbers = [];
-        let successCount = 0;
-        let failureCount = 0;
-        
-        for(let i = 0; i < phone_numbers.length; i++) {
-            const participant = phone_numbers[i];
-            try {
-                
-                sendMessage(sock, participant, {caption: message, image: imageBuffer});
-
-                // dynamic wait 20 to 50 seconds
-                const waitTime = Math.floor(Math.random() * 30) + 20;
-                console.log('==Waiting:', waitTime);
-                await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-                successCount++;
-                successNumbers.push(participant);
-            } catch (error) {
-                failureCount++;
-                failureNumbers.push(participant);
-                continue;
-            }
-        }
-
-        // write a summary message to send admins
-        let summaryMessage = `*Campaign Summary*\n\n` +
-            `Total Numbers: ${phone_numbers.length}\n` +
-            `Successful: ${successCount}\n` +
-            `Failed: ${failureCount}\n\n`;
-        
-        await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });   
-        await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: summaryMessage });   
-        await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: summaryMessage });
-        await sock.sendMessage(`923367674817@s.whatsapp.net`, { text: summaryMessage });
-
-        const payload = new URLSearchParams();
-        // add success and failure array to payload
-        payload.append("success_numbers", JSON.stringify(successNumbers));
-        payload.append("failure_numbers", JSON.stringify(failureNumbers));
-        payload.append("success_count", successCount);
-        payload.append("failure_count", failureCount);
-        // payload.append("data", []); // Adding an empty array for consistency
-        const endpoint = 'den-campaigns/mark-completed';
-        await makeServerPostApiCall(payload, endpoint);
-        
-    } catch (err) {
-        await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
-        await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
-        await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
-        console.error('❌ Send error:', err);
-    }
-}
 
 function sleep(time = 2000) {
     return new Promise((resolve) => setTimeout(resolve, time));
