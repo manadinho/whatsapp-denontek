@@ -28,6 +28,13 @@ const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
 const SERVER_BASE_URL = "http://staging.denontek.com.pk";
 const DEN_API_KEY = "denapi4568";
 
+let campaignStartedAt = '';
+let campaignSuccessNumbers = [];
+let campaignFailureNumbers = [];
+let campaignSuccessCount = 0;
+let campaignFailureCount = 0;
+let campaignStatus = 'not_started';
+
 // Create WhatsApp connection
 async function startSock() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -176,6 +183,12 @@ async function startSock() {
 
                 // this section is for Farhan only right now
                 if(textFirstValue === 'c1') {
+                    if(campaignStatus === 'in_progress') {
+                        await sock.sendMessage(sender, { text: '❌ A campaign is already in progress. Please wait until it is completed.' });
+                        await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+                        return;
+                    }
+
                     let senderNumber = sender.replace('@s.whatsapp.net', '');
 
                     if(!ADMINS_NUMBERS.includes(senderNumber)) {
@@ -184,10 +197,32 @@ async function startSock() {
                         return;
                     }
 
+                    await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
                     const endpoint = 'den-campaigns/start';
                     await makeServerGetApiCall(endpoint);
                     await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
-                    await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
+                    return;
+                }
+
+                if(textFirstValue === 'c2') {
+                    if(campaignStatus === 'not_started') {
+                        await sock.sendMessage(sender, { text: '❌ No Campaign is running at the moment.' });
+                        await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
+                        return;
+                    }
+
+                    // prepare and send a message about total numbers in current campaign and when it started and how many are successful and failed
+                    let durationHHMMSS = formatDuration(Date.now() - campaignStartedAt);
+                    let message = `*Campaign Status*\n\n` +
+                                  `Status: ${campaignStatus}\n` +
+                                  `Started At: ${new Date(campaignStartedAt).toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}\n` +
+                                  `Duration: ${durationHHMMSS}\n` +
+                                  `Successful: ${campaignSuccessCount}\n` +
+                                  `Failed: ${campaignFailureCount}\n\n` +
+                                  `You will receive a summary once the campaign is completed.`;
+
+                    await sock.sendMessage(sender, { text: message });
+                    await sock.sendPresenceUpdate('paused', sender); // stop typing indicator
                     return;
                 }
 
@@ -555,6 +590,9 @@ app.post('/start-campaign', async (req, res) => {
 })
 
 async function manageCampaign(phone_numbers = []) {
+    campaignStartedAt = Date.now();
+    campaignStatus = 'in_progress';
+
     try {
         const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/campaign.jpeg';
         const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
@@ -567,11 +605,6 @@ async function manageCampaign(phone_numbers = []) {
                 "📍 *Apna city name bhejein aur janen aap ke sheher mein kon kon se schools yeh system use kar rahay hain.*\n\n" +
                 "📲 WhatsApp for orders: 03176063820\n\n" +
                 "Reply *STOP* to unsubscribe.";
-        // manage success and failure count and mantain list of those numbers
-        const successNumbers = [];
-        const failureNumbers = [];
-        let successCount = 0;
-        let failureCount = 0;
         
         for(let i = 0; i < phone_numbers.length; i++) {
             const participant = phone_numbers[i];
@@ -583,42 +616,58 @@ async function manageCampaign(phone_numbers = []) {
                 const waitTime = Math.floor(Math.random() * 30) + 20;
                 console.log('==Waiting:', waitTime);
                 await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-                successCount++;
-                successNumbers.push(participant);
+                campaignSuccessCount++;
+                campaignSuccessNumbers.push(participant);
             } catch (error) {
-                failureCount++;
-                failureNumbers.push(participant);
+                campaignFailureCount++;
+                campaignFailureNumbers.push(participant);
                 continue;
             }
         }
 
+        const endedAt = Date.now();
+        const durationHHMMSS = formatDuration(endedAt - campaignStartedAt);
+
         // write a summary message to send admins
         let summaryMessage = `*Campaign Summary*\n\n` +
             `Total Numbers: ${phone_numbers.length}\n` +
-            `Successful: ${successCount}\n` +
-            `Failed: ${failureCount}\n\n`;
+            `Successful: ${campaignSuccessCount}\n` +
+            `Failed: ${campaignFailureCount}\n`
+            `Time to complete: ${durationHHMMSS}\n\n`;
         
         await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });   
         await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: summaryMessage });   
         await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: summaryMessage });
         await sock.sendMessage(`923367674817@s.whatsapp.net`, { text: summaryMessage });
 
+        // reset campaign variables
+        resetCampaignVariables();
+
         const payload = new URLSearchParams();
         // add success and failure array to payload
-        payload.append("success_numbers", JSON.stringify(successNumbers));
-        payload.append("failure_numbers", JSON.stringify(failureNumbers));
-        payload.append("success_count", successCount);
-        payload.append("failure_count", failureCount);
+        payload.append("success_numbers", JSON.stringify(campaignSuccessNumbers));
+        payload.append("failure_numbers", JSON.stringify(campaignFailureNumbers));
+        payload.append("success_count", campaignSuccessCount);
+        payload.append("failure_count", campaignFailureCount);
         // payload.append("data", []); // Adding an empty array for consistency
         const endpoint = 'den-campaigns/mark-completed';
         await makeServerPostApiCall(payload, endpoint);
         
     } catch (err) {
+        resetCampaignVariables();
         await sock.sendMessage(`923008620417@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
         await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
         await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: "**ERROR TYPE: Campaing Error**\n\n"+err.message });   
         console.error('❌ Send error:', err);
     }
+}
+
+function formatDuration(ms) {
+    const total = Math.floor(ms / 1000);
+    const h = String(Math.floor(total / 3600)).padStart(2, '0');
+    const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+    const s = String(total % 60).padStart(2, '0');
+    return `${h}:${m}:${s}`;
 }
 
 function sleep(time = 2000) {
@@ -740,6 +789,15 @@ const fetchImageBuffer = async (secureUrl, url) => {
       }
     }
 };
+
+function resetCampaignVariables() {
+    campaignStartedAt = '';
+    campaignSuccessNumbers = [];
+    campaignFailureNumbers = [];
+    campaignSuccessCount = 0;
+    campaignFailureCount = 0;
+    campaignStatus = 'not_started';
+}
 
 
 if (fs.existsSync(sessionPath)) {
