@@ -246,7 +246,7 @@ async function startSock() {
             }
 
             // check is this first message comming from FB ads click to WhatsApp
-            if (text === 'Hello! Can I get more info on this?') {
+            if (['What are your delivery options?', 'Hello! Can I get more info on this?', 'Can you check the price of a product?', 'Price?'].includes(text)) {
                 await sock.readMessages([msg.key]);
                 await sock.sendPresenceUpdate('composing', sender); // send typing indicator
                 const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/10600.jpeg';
