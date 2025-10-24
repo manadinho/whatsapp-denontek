@@ -345,7 +345,7 @@ async function startSockFor(sid) {
 
             const oggBuf = await fs.promises.readFile(oggPath);
 
-            const resp = await fetch(`http://${process.env.TRANSCRIBE_API}/transcribe`, {
+            const resp = await fetch(`https://493e5c886615.ngrok-free.app/transcribe`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
