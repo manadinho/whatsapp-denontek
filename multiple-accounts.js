@@ -7,11 +7,11 @@ const https = require('https');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
 const { logMessage, drainAll, flushLogsFor, cleanTempDrainDirs } = require('./conv-logger');
-const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
-const OpenAI = require('openai');
-const openai = new OpenAI({
-    apiKey: WHISPER_API_KEY,
-});
+// const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
+// const OpenAI = require('openai');
+// const openai = new OpenAI({
+//     apiKey: WHISPER_API_KEY,
+// });
 
 const app = express();
 app.use(express.json());
@@ -326,25 +326,43 @@ async function startSockFor(sid) {
             const oggPath = path.join(__dirname, `wa-${msg.key.id}.ogg`);
             await streamToFile(stream, oggPath);
 
-            // 2) convert to WAV (16k mono) for best STT compatibility
-            const wavPath = path.join(__dirname, `wa-${msg.key.id}.wav`);
-            await new Promise((resolve, reject) => {
-                // ffmpeg -i input.ogg -ar 16000 -ac 1 output.wav
-                const ff = spawn('ffmpeg', ['-y', '-i', oggPath, '-ar', '16000', '-ac', '1', wavPath]);
-                ff.stderr.on('data', d => {/* optionally log */});
-                ff.on('exit', code => code === 0 ? resolve() : reject(new Error('ffmpeg failed')));
+            // // 2) convert to WAV (16k mono) for best STT compatibility
+            // const wavPath = path.join(__dirname, `wa-${msg.key.id}.wav`);
+            // await new Promise((resolve, reject) => {
+            //     // ffmpeg -i input.ogg -ar 16000 -ac 1 output.wav
+            //     const ff = spawn('ffmpeg', ['-y', '-i', oggPath, '-ar', '16000', '-ac', '1', wavPath]);
+            //     ff.stderr.on('data', d => {/* optionally log */});
+            //     ff.on('exit', code => code === 0 ? resolve() : reject(new Error('ffmpeg failed')));
+            // });
+
+            // // 3) call OpenAI / Whisper transcription (example)
+            // const transcription = await openai.audio.transcriptions.create({
+            //     file: fs.createReadStream(wavPath),
+            //     model: 'whisper-1',
+            //     translate: true,
+            //     language: 'ur',
+            // });
+
+            const oggBuf = await fs.promises.readFile(oggPath);
+
+            const resp = await fetch(`http://${process.env.TRANSCRIBE_API}/transcribe`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                data: oggBuf.toString('base64'),   // base64 OGG
+                contentType: 'audio/ogg',          // let the service know the media type
+                language: 'ur',                    // pass through desired language
+                translate: true                    // if your service supports translation
+              })
             });
 
-            // 3) call OpenAI / Whisper transcription (example)
-            const transcription = await openai.audio.transcriptions.create({
-                file: fs.createReadStream(wavPath),
-                model: 'whisper-1',
-                translate: true,
-                language: 'ur',
-            });
-        
+            console.log("---resp", resp);
+
+            if (!resp.ok) throw new Error(`transcribe service failed: ${resp.status}`);
+            const { text: transcript } = await resp.json();
+
             // 4) reply with the transcript (or store it)
-            text = transcription.text;
+            text = transcript;
 
             // cleanup temp files
             fs.unlinkSync(oggPath);
