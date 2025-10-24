@@ -344,7 +344,6 @@ async function startSockFor(sid) {
 
             // cleanup temp files
             fs.unlinkSync(oggPath);
-            fs.unlinkSync(wavPath);
             console.log(`[${sid}] 📝 Transcribed audio message:`, text);
         }
 
