@@ -207,24 +207,24 @@ async function startSockFor(sid) {
 
             // start campaign (Farhan only)
             if (textFirstValue === 'c1') {
-            if (ses.ctx.campaignStatus === 'in_progress') {
-                await sock.sendMessage(sender, { text: '❌ A campaign is already in progress. Please wait until it is completed.' });
+                if (ses.ctx.campaignStatus === 'in_progress') {
+                    await sock.sendMessage(sender, { text: '❌ A campaign is already in progress. Please wait until it is completed.' });
+                    await sock.sendPresenceUpdate('paused', sender);
+                    return;
+                }
+
+                let senderNumber = sender.replace('@s.whatsapp.net', '');
+                if (!ADMINS_NUMBERS.includes(senderNumber)) {
+                    await sock.sendPresenceUpdate('paused', sender);
+                    await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
+                    return;
+                }
+
+                await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
+                const endpoint = 'den-campaigns/start';
+                await makeServerGetApiCall(endpoint);
                 await sock.sendPresenceUpdate('paused', sender);
                 return;
-            }
-
-            let senderNumber = sender.replace('@s.whatsapp.net', '');
-            if (!ADMINS_NUMBERS.includes(senderNumber)) {
-                await sock.sendPresenceUpdate('paused', sender);
-                await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
-                return;
-            }
-
-            await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
-            const endpoint = 'den-campaigns/start';
-            await makeServerGetApiCall(endpoint);
-            await sock.sendPresenceUpdate('paused', sender);
-            return;
             }
 
             // campaign status
@@ -846,8 +846,19 @@ app.get('/status', (req, res) => {
 });
 
 app.post('/send', async (req, res) => {
-  req.params.sid = DEFAULT_SID;
-  return app._router.handle(req, res, 'post', `/${DEFAULT_SID}/send`);
+  const sid = DEFAULT_SID;
+  try {
+    const ses = getSes(sid);
+    if (!ses.isConnected || !ses.sock) return res.status(400).json({ error: 'WhatsApp is not connected' });
+    const { number, message } = req.body;
+    if (!number || !message) return res.status(400).json({ error: 'Missing number or message' });
+    const jid = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+    await ses.sock.sendMessage(jid, { text: message });
+    return res.json({ success: true, sid, to: number, message });
+  } catch (err) {
+    console.error(`[${sid}] send error`, err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/send-custom', async (req, res) => {
