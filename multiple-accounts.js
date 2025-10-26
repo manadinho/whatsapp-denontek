@@ -268,31 +268,31 @@ async function startSockFor(sid) {
         }
 
         // FB ads greeting special case
-        if (text === 'Hello! Can I get more info on this?' && !isOutgoing) {
-            await sock.readMessages([msg.key]);
-            await sock.sendPresenceUpdate('composing', sender);
-            const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/10600.jpeg';
-            const secondImageUrl = 'https://staging.denontek.com.pk/public/images/13200.jpeg';
-            const thirdImageUrl  = 'https://staging.denontek.com.pk/public/images/14200.jpeg';
+        // if (text === 'Hello! Can I get more info on this?' && !isOutgoing) {
+        //     await sock.readMessages([msg.key]);
+        //     await sock.sendPresenceUpdate('composing', sender);
+        //     const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/10600.jpeg';
+        //     const secondImageUrl = 'https://staging.denontek.com.pk/public/images/13200.jpeg';
+        //     const thirdImageUrl  = 'https://staging.denontek.com.pk/public/images/14200.jpeg';
 
-            const [b1, b2, b3] = await Promise.all([
-            fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://')),
-            fetchImageBuffer(secondImageUrl, secondImageUrl.replace(/^https:\/\//i, 'http://')),
-            fetchImageBuffer(thirdImageUrl, thirdImageUrl.replace(/^https:\/\//i, 'http://')),
-            ]);
+        //     const [b1, b2, b3] = await Promise.all([
+        //     fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://')),
+        //     fetchImageBuffer(secondImageUrl, secondImageUrl.replace(/^https:\/\//i, 'http://')),
+        //     fetchImageBuffer(thirdImageUrl, thirdImageUrl.replace(/^https:\/\//i, 'http://')),
+        //     ]);
 
-            if (!b1 || !b2 || !b3) { await sock.sendPresenceUpdate('paused', sender); return; }
+        //     if (!b1 || !b2 || !b3) { await sock.sendPresenceUpdate('paused', sender); return; }
 
-            try {
-            await sock.sendMessage(sender, { image: b1, mimetype: 'image/jpeg', caption: 'Rs 10600/-' });
-            await sock.sendMessage(sender, { image: b2, mimetype: 'image/jpeg', caption: 'Rs 13200/-' });
-            await sock.sendMessage(sender, { image: b3, mimetype: 'image/jpeg', caption: 'Rs 14200/-' });
-            await sock.sendPresenceUpdate('paused', sender);
-            } catch {
-            await sock.sendPresenceUpdate('paused', sender);
-            return;
-            }
-        }
+        //     try {
+        //     await sock.sendMessage(sender, { image: b1, mimetype: 'image/jpeg', caption: 'Rs 10600/-' });
+        //     await sock.sendMessage(sender, { image: b2, mimetype: 'image/jpeg', caption: 'Rs 13200/-' });
+        //     await sock.sendMessage(sender, { image: b3, mimetype: 'image/jpeg', caption: 'Rs 14200/-' });
+        //     await sock.sendPresenceUpdate('paused', sender);
+        //     } catch {
+        //     await sock.sendPresenceUpdate('paused', sender);
+        //     return;
+        //     }
+        // }
 
         // Matched rules
         const matchedRule = rules.find(rule =>
