@@ -975,7 +975,7 @@ app.post('/:sid/start-followup', async (req, res) => {
     
     const agentNumber = AGENTS_NUMBERS_WITH_SESSIONS_IDS[sid];
     if (agentNumber) {
-      await ses.sock.sendMessage(agentNumber, { text: message });
+      await ses.sock.sendMessage(`${agentNumber}@s.whatsapp.net`, { text: message });
     }
 
     await ses.sock.sendMessage(`923008620417@s.whatsapp.net`, { text: message });
