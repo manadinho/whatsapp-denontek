@@ -30,6 +30,7 @@ const DEFAULT_SID = 'farhan';                   // legacy endpoints map to this
 // CHECK_NUMBER rule is to check all inquiries against a number
 const customRules = ['i1', 'i2', 's1', 'c1', 'c2', 'c3', '???']; // c1 = start campaign (Farhan only)
 const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940', '923176063820']; // w/o @s.whatsapp.net
+const AGENTS_NUMBERS = ['923143637459', '923008620417']; // w/o @s.whatsapp.net
 
 const PORT = process.env.PORT || 3000;
 // const SERVER_BASE_SECURE_URL = "http://192.168.1.14:8000";
@@ -214,14 +215,14 @@ async function startSockFor(sid) {
                 }
 
                 let senderNumber = sender.replace('@s.whatsapp.net', '');
-                if (!ADMINS_NUMBERS.includes(senderNumber)) {
+                if (!ADMINS_NUMBERS.includes(senderNumber) || !AGENTS_NUMBERS.includes(senderNumber)) {
                     await sock.sendPresenceUpdate('paused', sender);
                     await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
                     return;
                 }
 
                 await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
-                const endpoint = 'den-campaigns/start';
+                const endpoint = 'den-campaigns/start?agent_number=' + senderNumber;
                 await makeServerGetApiCall(endpoint);
                 await sock.sendPresenceUpdate('paused', sender);
                 return;
