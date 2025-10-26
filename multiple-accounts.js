@@ -31,6 +31,11 @@ const DEFAULT_SID = 'farhan';                   // legacy endpoints map to this
 const customRules = ['i1', 'i2', 's1', 'c1', 'c2', 'c3', '???']; // c1 = start campaign (Farhan only)
 const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940', '923176063820']; // w/o @s.whatsapp.net
 const AGENTS_NUMBERS = ['923143637459', '923008620417']; // w/o @s.whatsapp.net
+const AGENTS_NUMBERS_WITH_SESSIONS_IDS = {
+    'farhan': '923176063820',
+    'amber': '923008620417',
+    'rubaisha': '923143637459',
+}
 
 const PORT = process.env.PORT || 3000;
 // const SERVER_BASE_SECURE_URL = "http://192.168.1.14:8000";
@@ -62,6 +67,18 @@ function makeCampaignCtx() {
   };
 }
 
+function makeFollowupCtx() {
+    return {
+        // SEPARATE: Follow-up context (completely independent)
+        followUpStartedAt: '',
+        followUpSuccessNumbers: [],
+        followUpFailureNumbers: [],
+        followUpSuccessCount: 0,
+        followUpFailureCount: 0,
+        followUpStatus: 'not_started',
+    }
+}
+
 function getSes(sid) {
   if (!sid || !Sessions[sid]) throw new Error(`Unknown session: ${sid}`);
   return Sessions[sid];
@@ -70,6 +87,11 @@ function getSes(sid) {
 function resetCampaignVariablesFor(sid) {
   const ses = getSes(sid);
   ses.ctx = makeCampaignCtx();
+}
+
+function resetFollowupVariablesFor(sid) {
+  const ses = getSes(sid);
+  ses.ctx = makeFollowupCtx();
 }
 
 // ===== WhatsApp connection per session =====
@@ -664,6 +686,78 @@ async function manageCampaignFor(sid, phone_numbers = []) {
   resetCampaignVariablesFor(sid);
 }
 
+// ===== Followup (session-scoped) =====
+async function manageFollowupFor(sid, phone_numbers = []) {
+  const ses = getSes(sid);
+  const sock = ses.sock;
+
+  try {
+    const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/reminder.jpeg';
+    const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
+
+    const message = `السلام علیکم،
+امید ہے آپ خیریت سے ہوں گے۔ پہلے آپ سے Denontek کے آٹومیٹک اسکول بیل سسٹم کے بارے میں بات ہوئی تھی۔ ہم آپ سے دوبارہ رابطہ اس لیے کر رہے ہیں تاکہ معلوم ہو سکے کہ کیا آپ اس سسٹم کی تنصیب پر غور کر رہے ہیں؟
+اگر آپ کو کسی بھی قسم کی معلومات، رہنمائی یا مدد درکار ہو تو براہِ کرم ہمیں ضرور آگاہ کریں — ہماری ٹیم ہر وقت آپ کی خدمت کے لیے دستیاب ہے۔
+شکریہ،
+Team Denontek`;
+
+    resetFollowupVariablesFor(sid);
+    ses.ctx.followUpStartedAt = Date.now();
+    ses.ctx.followUpStatus = 'in_progress';
+
+    for (let i = 0; i < phone_numbers.length; i++) {
+      if (ses.ctx.followUpStatus !== 'in_progress') {
+        console.log(`[${sid}] 🛑 Follow stopped by admin request.`);
+        break;
+      }
+
+      const participant = phone_numbers[i];
+      try {
+        await sock.sendMessage(participant, { caption: message, image: imageBuffer });
+
+        // dynamic wait 20–50 seconds
+        const waitTime = Math.floor(Math.random() * 30) + 20;
+        console.log(`[${sid}] ==Waiting:`, waitTime);
+        await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+
+        ses.ctx.followUpSuccessCount++;
+        ses.ctx.followUpSuccessNumbers.push(participant);
+      } catch (error) {
+        ses.ctx.followUpFailureCount++;
+        ses.ctx.followUpFailureNumbers.push(participant);
+        continue;
+      }
+    }
+  } catch (err) {
+    await ses.sock.sendMessage(`923008620417@s.whatsapp.net`, { text: `**ERROR TYPE: Campaing Error [${sid}]**\n\n${err.message}` });
+    await ses.sock.sendMessage(`923004013334@s.whatsapp.net`, { text: `**ERROR TYPE: Campaing Error [${sid}]**\n\n${err.message}` });
+    await ses.sock.sendMessage(`923076929940@s.whatsapp.net`, { text: `**ERROR TYPE: Campaing Error [${sid}]**\n\n${err.message}` });
+    console.error(`[${sid}] ❌ Send error:`, err);
+  }
+
+  const endedAt = Date.now();
+  const durationMs = endedAt - ses.ctx.campaignStartedAt;
+  const durationHuman = humanizeDuration(durationMs);
+
+  let summaryMessage = `*Followup Summary* [${sid}]\n\n` +
+    `Total Numbers: ${ses.ctx.followUpSuccessNumbers.length + ses.ctx.followUpFailureNumbers.length}\n` +
+    `Successful: ${ses.ctx.followUpSuccessCount}\n` +
+    `Failed: ${ses.ctx.followUpFailureCount}\n` +
+    `Duration: ${durationHuman}\n\n`;
+
+    const agentNumber = AGENTS_NUMBERS_WITH_SESSIONS_IDS[sid];
+    if (agentNumber) {
+        await ses.sock.sendMessage(`${agentNumber}@s.whatsapp.net`, { text: summaryMessage });
+    }
+
+  await ses.sock.sendMessage(`923008620417@s.whatsapp.net`, { text: summaryMessage });
+  await ses.sock.sendMessage(`923004013334@s.whatsapp.net`, { text: summaryMessage });
+  await ses.sock.sendMessage(`923076929940@s.whatsapp.net`, { text: summaryMessage });
+  await ses.sock.sendMessage(`923367674817@s.whatsapp.net`, { text: summaryMessage });
+
+  resetFollowupVariablesFor(sid);
+}
+
 const UNSUB_RE = /reply\s*\*?stop\*?\s*to\s*unsubscribe\.?$/i;
 function normalize(s) {
   return String(s).trim().replace(/\s+/g, " ");
@@ -841,6 +935,11 @@ app.post('/:sid/start-campaign', async (req, res) => {
       `Total Numbers: ${phone_numbers.length}\n` +
       `Start Time: ${new Date().toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}\n\n` +
       `You will receive a summary once the campaign is completed.`;
+    
+    const agentNumber = AGENTS_NUMBERS_WITH_SESSIONS_IDS[sid];
+    if (agentNumber) {
+      await ses.sock.sendMessage(`${agentNumber}@s.whatsapp.net`, { text: message });
+    }
 
     await ses.sock.sendMessage(`923008620417@s.whatsapp.net`, { text: message });
     await ses.sock.sendMessage(`923004013334@s.whatsapp.net`, { text: message });
@@ -855,80 +954,41 @@ app.post('/:sid/start-campaign', async (req, res) => {
   }
 });
 
-// webhook (routes via sid query or defaults to farhan)
-app.post('/webhook', async (req, res) => {
-  const sid = req.query.sid || DEFAULT_SID;
+app.post('/:sid/start-followup', async (req, res) => {
+  const sid = req.params.sid;
+  const apiKey = req.headers['x-den-api-key'];
+  if (apiKey !== DEN_API_KEY) return res.json({ success: false, message: 'Forbidden' });
 
-  console.log('🔔 Webhook received');
-  console.log('Headers:', req.headers);
-  console.log('Body:', req.body);
-
-  const { trackingNumber, orderReferenceNumber, statusUpdateDatetime, orderStatus } = req.body;
-
-  // check if the orderStatus is in the list of statuses
-  if (!['PostEx WareHouse', 'Out For Delivery', 'Attempted', 'Delivered'].includes(orderStatus)) {
-    return res.status(200).send('Webhook received');
+  const { phone_numbers } = req.body;
+  if (!phone_numbers || !Array.isArray(phone_numbers) || phone_numbers.length === 0) {
+    return res.json({ success: false, message: 'Invalid phone_numbers' });
   }
-  if (orderStatus.includes('En-Route to {14} warehouse')) {
-    return res.status(200).send('Webhook received');
-  }
-
-  let numberToSend = '923344778077';
-  let needToSendFarhan = false;
-
-  if (orderReferenceNumber.startsWith('F-')) {
-    needToSendFarhan = true;
-    numberToSend = orderReferenceNumber.split('-')[1];
-  }
-
-  if (orderReferenceNumber.startsWith('0') && orderReferenceNumber.length == 11) {
-    numberToSend = orderReferenceNumber.replace('0', '92');
-  }
-
-  numberToSend = numberToSend.replace(/\s/g, '') + '@s.whatsapp.net';
-
-  const date = new Date(statusUpdateDatetime);
-  date.setHours(date.getHours() - 5);
-
-  const commonDesc = "Your parcel is heading towards your city.";
-  const commonIcon = "🚛";
-
-  const statusMessages = {
-    "Attempted":            { icon: "⚠️", desc: "Delivery attempt failed or the courier tried to contact you." },
-    "Delivered":            { icon: "✅", desc: "Your parcel has been delivered successfully." },
-    "Delivery En-Route":    { icon: "🚚", desc: "Courier is on the way to deliver your parcel." },
-    "In Stock":             { icon: "📦", desc: "Your parcel is at the courier's facility." },
-    "Transferred":          { icon: commonIcon, desc: commonDesc },
-    "PostEx WareHouse":     { icon: commonIcon, desc: commonDesc },
-    "En-Route to {14} warehouse": { icon: commonIcon, desc: commonDesc },
-    "Under Verification":   { icon: "⚠️", desc: "Delivery attempt failed or under verification." },
-    "Unbooked":             { icon: "🕒", desc: "Your parcel has been booked. Awaiting further updates." }
-  };
-
-  const { icon = "📦", desc = "Your parcel status is being updated." } = statusMessages[orderStatus] || {};
-
-  const message = `${icon} Parcel Tracking Update
-
-    🧾 Order Ref: ${orderReferenceNumber}
-    🔢 Tracking Number: ${trackingNumber}
-    📅 Last Updated: ${date.toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}
-    🚚 Current Status: ${icon} ${orderStatus}
-
-    ℹ️ ${desc}
-
-    Thank you for your patience and for shopping with us!`;
 
   try {
     const ses = getSes(sid);
-    await ses.sock.sendMessage(numberToSend, { text: message });
-    if (needToSendFarhan) {
-      await ses.sock.sendMessage('923367674817@s.whatsapp.net', { text: message });
-    }
-  } catch (e) {
-    console.error(`[${sid}] webhook send error`, e.message);
-  }
+    if (!ses.isConnected || !ses.sock) return res.status(400).json({ error: 'WhatsApp is not connected' });
 
-  res.status(200).send('Webhook received');
+    let message = `🚀 *Followup Started* [${sid}]\n\n` +
+      `Total Numbers: ${phone_numbers.length}\n` +
+      `Start Time: ${new Date().toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}\n\n` +
+      `You will receive a summary once the followup is completed.`;
+    
+    const agentNumber = AGENTS_NUMBERS_WITH_SESSIONS_IDS[sid];
+    if (agentNumber) {
+      await ses.sock.sendMessage(agentNumber, { text: message });
+    }
+
+    await ses.sock.sendMessage(`923008620417@s.whatsapp.net`, { text: message });
+    await ses.sock.sendMessage(`923004013334@s.whatsapp.net`, { text: message });
+    await ses.sock.sendMessage(`923076929940@s.whatsapp.net`, { text: message });
+    await ses.sock.sendMessage(`923367674817@s.whatsapp.net`, { text: message });
+
+    manageFollowupFor(sid, phone_numbers).catch(()=>{});
+    return res.json({ success: true, sid, message: 'Followup started' });
+  } catch (err) {
+    console.error(`[${sid}] start-followup error`, err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // === Backward compatibility endpoints (map to DEFAULT_SID = farhan) ===
