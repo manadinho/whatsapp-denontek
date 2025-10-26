@@ -164,47 +164,46 @@ async function startSockFor(sid) {
         // ===== custom rules =====
         const textParts = (text || '').split(' ');
         const textFirstValue = (textParts[0] || '').trim().toLowerCase();
-        console.log('====here', textFirstValue, isOutgoing);
 
-        if (customRules.includes(textFirstValue) && !isOutgoing) {
+        if (customRules.includes(textFirstValue)) {
             await sock.readMessages([msg.key]);
             await sock.sendPresenceUpdate('composing', sender);
 
             if (textFirstValue === '???') {
-            const helpText = `*Available Commands:*\n\n` +
-                `1. *i1* - Get today's inquiries submitted by you.\n` +
-                `   _Example:_ TODAY_INQUIRIES\n\n` +
-                `2. *i2 <NUMBER>* - Check inquiries against a specific number.\n` +
-                `   _Example:_ CHECK_NUMBER\\n03001234567\n\n` +
-                `3. *???* - Display this help message.\n\n` +
-                `*Note:* Please ensure to use the exact command format as shown above.`;
-            await sock.sendMessage(sender, { text: helpText });
+                const helpText = `*Available Commands:*\n\n` +
+                    `1. *i1* - Get today's inquiries submitted by you.\n` +
+                    `   _Example:_ TODAY_INQUIRIES\n\n` +
+                    `2. *i2 <NUMBER>* - Check inquiries against a specific number.\n` +
+                    `   _Example:_ CHECK_NUMBER\\n03001234567\n\n` +
+                    `3. *???* - Display this help message.\n\n` +
+                    `*Note:* Please ensure to use the exact command format as shown above.`;
+                await sock.sendMessage(sender, { text: helpText });
             }
 
             if (textFirstValue === 'i2') {
-            console.log(`[${sid}] 📞 CHECK_NUMBER rule triggered`, textParts[1]);
-            const payload = new URLSearchParams();
-            payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
-            payload.append("type", "CHECK_NUMBER");
-            payload.append("data", [textParts[1]]);
-            const endpoint = 'den-inquiry/api-send-message';
-            await makeServerPostApiCall(payload, endpoint);
+                console.log(`[${sid}] 📞 CHECK_NUMBER rule triggered`, textParts[1]);
+                const payload = new URLSearchParams();
+                payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
+                payload.append("type", "CHECK_NUMBER");
+                payload.append("data", [textParts[1]]);
+                const endpoint = 'den-inquiry/api-send-message';
+                await makeServerPostApiCall(payload, endpoint);
             }
 
             if (textFirstValue === 'i1') {
-            const payload = new URLSearchParams();
-            payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
-            payload.append("type", "TODAY_INQUIRIES");
-            const endpoint = 'den-inquiry/api-send-message';
-            await makeServerPostApiCall(payload, endpoint);
+                const payload = new URLSearchParams();
+                payload.append("agent_number", sender.replace('@s.whatsapp.net', ''));
+                payload.append("type", "TODAY_INQUIRIES");
+                const endpoint = 'den-inquiry/api-send-message';
+                await makeServerPostApiCall(payload, endpoint);
             }
 
             if (textFirstValue === 's1') {
-            let senderNumber = sender.replace('@s.whatsapp.net', '');
-            if (ADMINS_NUMBERS.includes(senderNumber)) {
-                const endpoint = 'den-inquiry/daily-sale-statistics';
-                await makeServerGetApiCall(endpoint);
-            }
+                let senderNumber = sender.replace('@s.whatsapp.net', '');
+                if (ADMINS_NUMBERS.includes(senderNumber)) {
+                    const endpoint = 'den-inquiry/daily-sale-statistics';
+                    await makeServerGetApiCall(endpoint);
+                }
             }
 
             // start campaign (Farhan only)
