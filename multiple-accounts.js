@@ -381,7 +381,7 @@ async function startSockFor(sid) {
 
 function convertUrduToRoman(text) {
     let data = JSON.stringify({
-        "model": "mistral",
+        "model": "deepseek-v3.1:671b-cloud",
         "messages": [
             {
             "role": "system",
