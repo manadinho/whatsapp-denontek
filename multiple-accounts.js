@@ -164,6 +164,7 @@ async function startSockFor(sid) {
         // ===== custom rules =====
         const textParts = (text || '').split(' ');
         const textFirstValue = (textParts[0] || '').trim().toLowerCase();
+        console.log('====here', textFirstValue, isOutgoing);
 
         if (customRules.includes(textFirstValue) && !isOutgoing) {
             await sock.readMessages([msg.key]);
