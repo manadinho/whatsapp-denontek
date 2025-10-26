@@ -230,38 +230,38 @@ async function startSockFor(sid) {
 
             // campaign status
             if (textFirstValue === 'c2') {
-            if (ses.ctx.campaignStatus === 'not_started') {
-                await sock.sendMessage(sender, { text: '❌ No Campaign is running at the moment.' });
+                if (ses.ctx.campaignStatus === 'not_started') {
+                    await sock.sendMessage(sender, { text: '❌ No Campaign is running at the moment.' });
+                    await sock.sendPresenceUpdate('paused', sender);
+                    return;
+                }
+
+                const endedAt = Date.now();
+                const durationMs = endedAt - ses.ctx.campaignStartedAt;
+                const durationHuman = humanizeDuration(durationMs);
+                let message = `*Campaign Status* [${sid}]\n\n` +
+                    `Status: ${ses.ctx.campaignStatus}\n` +
+                    `Started At: ${new Date(ses.ctx.campaignStartedAt).toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}\n` +
+                    `Duration: ${durationHuman}\n` +
+                    `Successful: ${ses.ctx.campaignSuccessCount}\n` +
+                    `Failed: ${ses.ctx.campaignFailureCount}\n\n` +
+                    `You will receive a summary once the campaign is completed.`;
+
+                await sock.sendMessage(sender, { text: message });
                 await sock.sendPresenceUpdate('paused', sender);
                 return;
-            }
-
-            const endedAt = Date.now();
-            const durationMs = endedAt - ses.ctx.campaignStartedAt;
-            const durationHuman = humanizeDuration(durationMs);
-            let message = `*Campaign Status* [${sid}]\n\n` +
-                `Status: ${ses.ctx.campaignStatus}\n` +
-                `Started At: ${new Date(ses.ctx.campaignStartedAt).toLocaleString('en-GB', { timeZone: 'Asia/Karachi' })}\n` +
-                `Duration: ${durationHuman}\n` +
-                `Successful: ${ses.ctx.campaignSuccessCount}\n` +
-                `Failed: ${ses.ctx.campaignFailureCount}\n\n` +
-                `You will receive a summary once the campaign is completed.`;
-
-            await sock.sendMessage(sender, { text: message });
-            await sock.sendPresenceUpdate('paused', sender);
-            return;
             }
 
             // campaign stop
             if (textFirstValue === 'c3') {
-            if (ses.ctx.campaignStatus !== 'in_progress') {
-                await sock.sendMessage(sender, { text: '❌ No Campaign is running at the moment.' });
-                await sock.sendPresenceUpdate('paused', sender);
+                if (ses.ctx.campaignStatus !== 'in_progress') {
+                    await sock.sendMessage(sender, { text: '❌ No Campaign is running at the moment.' });
+                    await sock.sendPresenceUpdate('paused', sender);
+                    return;
+                }
+                ses.ctx.campaignStatus = 'not_started';
+                await sock.sendMessage(sender, { text: '🛑 Campaign stop request received. The campaign will stop shortly.' });
                 return;
-            }
-            ses.ctx.campaignStatus = 'not_started';
-            await sock.sendMessage(sender, { text: '🛑 Campaign stop request received. The campaign will stop shortly.' });
-            return;
             }
 
             await sock.sendPresenceUpdate('paused', sender);
@@ -597,7 +597,7 @@ async function manageCampaignFor(sid, phone_numbers = []) {
   payload.append("failure_numbers", JSON.stringify(ses.ctx.campaignFailureNumbers));
   payload.append("success_count", ses.ctx.campaignSuccessCount);
   payload.append("failure_count", ses.ctx.campaignFailureCount);
-  const endpoint = 'den-campaigns/mark-completed';
+  const endpoint = 'den-campaigns/mark-completed?agent_name=' + sid;
   await makeServerPostApiCall(payload, endpoint);
 
   resetCampaignVariablesFor(sid);
