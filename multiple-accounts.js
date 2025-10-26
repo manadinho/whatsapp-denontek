@@ -704,6 +704,7 @@ Team Denontek`;
     resetFollowupVariablesFor(sid);
     ses.ctx.followUpStartedAt = Date.now();
     ses.ctx.followUpStatus = 'in_progress';
+    console.log('===phone_numbers', phone_numbers);
 
     for (let i = 0; i < phone_numbers.length; i++) {
       if (ses.ctx.followUpStatus !== 'in_progress') {
@@ -723,6 +724,7 @@ Team Denontek`;
         ses.ctx.followUpSuccessCount++;
         ses.ctx.followUpSuccessNumbers.push(participant);
       } catch (error) {
+        console.error('===Followup send error:', error.message);
         ses.ctx.followUpFailureCount++;
         ses.ctx.followUpFailureNumbers.push(participant);
         continue;
