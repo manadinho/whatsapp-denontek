@@ -215,9 +215,7 @@ async function startSockFor(sid) {
                 }
 
                 let senderNumber = sender.replace('@s.whatsapp.net', '');
-                console.log('====ADMIN NUMBERS====', ADMINS_NUMBERS);
-                console.log('=== SENDER NUMBER ===', senderNumber);
-                if (!ADMINS_NUMBERS.includes(senderNumber) || !AGENTS_NUMBERS.includes(senderNumber)) {
+                if (!ADMINS_NUMBERS.includes(senderNumber) && !AGENTS_NUMBERS.includes(senderNumber)) {
                     await sock.sendPresenceUpdate('paused', sender);
                     await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
                     return;
