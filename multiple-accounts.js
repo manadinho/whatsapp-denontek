@@ -37,6 +37,8 @@ const PORT = process.env.PORT || 3000;
 const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
 const SERVER_BASE_URL = "http://staging.denontek.com.pk";
 const DEN_API_KEY = "denapi4568";
+const LOCAL_AI_URL = "https://d5051ef50a23.ngrok-free.app";
+
 
 // ==== per-session containers ====
 /**
@@ -322,30 +324,42 @@ async function startSockFor(sid) {
         const messageContent = msg.message;
         const audioMsg = messageContent?.audioMessage || messageContent?.message?.audioMessage;
         if(audioMsg) {
-            // 1) download media stream (Baileys helper)
-            const stream = await downloadContentFromMessage(audioMsg, 'audio'); // returns async iterable
-            const oggPath = path.join(__dirname, `wa-${msg.key.id}.ogg`);
-            await streamToFile(stream, oggPath);
+            try {
+                // 1) download media stream (Baileys helper)
+                const stream = await downloadContentFromMessage(audioMsg, 'audio'); // returns async iterable
+                const oggPath = path.join(__dirname, `wa-${msg.key.id}.ogg`);
+                await streamToFile(stream, oggPath);
 
-            // 2) convert to WAV (16k mono) for best STT compatibility
-            // build a File for OpenAI directly from the OGG (no ffmpeg needed)
-            const oggBuf = await fs.promises.readFile(oggPath);
-            const fileForOpenAI = await OpenAI.toFile(oggBuf, `wa-${msg.key.id}.ogg`, { type: 'audio/ogg' });
+                // 2) convert to WAV (16k mono) for best STT compatibility
+                // build a File for OpenAI directly from the OGG (no ffmpeg needed)
+                const oggBuf = await fs.promises.readFile(oggPath);
+                const fileForOpenAI = await OpenAI.toFile(oggBuf, `wa-${msg.key.id}.ogg`, { type: 'audio/ogg' });
 
-            // 3) call OpenAI / Whisper transcription (example)
-            const transcription = await openai.audio.transcriptions.create({
-                file: fileForOpenAI,
-                model: 'whisper-1',
-                translate: true,
-                language: 'ur',
-            });
-        
-            // 4) reply with the transcript (or store it)
-            text = transcription.text;
+                // 3) call OpenAI / Whisper transcription (example)
+                const transcription = await openai.audio.transcriptions.create({
+                    file: fileForOpenAI,
+                    model: 'whisper-1',
+                    translate: true,
+                    language: 'ur',
+                });
+            
+                // 4) reply with the transcript (or store it)
+                text = transcription.text;
 
-            // cleanup temp files
-            fs.unlinkSync(oggPath);
-            console.log(`[${sid}] 📝 Transcribed audio message:`, text);
+                // cleanup temp files
+                fs.unlinkSync(oggPath);
+                console.log(`[${sid}] 📝 Transcribed audio message:`, text);
+
+                // make api call to convert urdu text to roman english
+                const romanText = await convertUrduToRoman(text);
+                if (romanText) {
+                    text = romanText;
+                }
+            } catch (err) {
+                // send error message to admins
+                await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: `**ERROR TYPE: Audio file transcript error [${sid}]**\n\n${err.message}` });
+                await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: `**ERROR TYPE: Audio file transcript error [${sid}]**\n\n${err.message}` });
+            }
         }
 
         if (text && !isOutgoing) {
@@ -363,6 +377,53 @@ async function startSockFor(sid) {
   });
 
   return { status: ses.isConnected ? 'connected' : (ses.lastQR ? 'qr' : 'starting') };
+}
+
+function convertUrduToRoman(text) {
+    let data = JSON.stringify({
+        "model": "mistral",
+        "messages": [
+            {
+            "role": "system",
+            "content": "You are a bilingual Urdu–English expert. When the user sends Urdu text, OUTPUT ONLY Roman Urdu (Urdu written in English letters). Do NOT add translations, explanations, parentheses, or extra text."
+            },
+            {
+            "role": "user",
+            "content": `${text}`
+            }
+        ],
+        "stream": false,
+        "options": {
+            "temperature": 0.2,
+            "num_predict": 300
+        }
+    });
+
+    return new Promise((resolve, reject) => {
+        let config = {
+            method: 'post',
+            maxBodyLength: Infinity,
+            url: LOCAL_AI_URL+'/api/chat',
+            headers: { 
+                'Content-Type': 'application/json'
+            },
+            data : data
+        };
+
+        axios.request(config)
+        .then((response) => {
+            console.log('==== response from ai',response.data);
+            if(response.data && response.data.message && response.data.message.content) {
+                return resolve(response.data.message.content);
+            }
+
+            resolve(false);
+            
+        })
+        .catch((error) => {
+            resolve(false);
+        });
+    });
 }
 
 function deleteSessionFor(sid) {
