@@ -730,21 +730,61 @@ app.get('/:sid/status', (req, res) => {
 });
 
 app.post('/:sid/send', async (req, res) => {
-    // set default sid 
   const sid = req.params.sid;
   try {
     const ses = getSes(sid);
     if (!ses.isConnected || !ses.sock) return res.status(400).json({ error: 'WhatsApp is not connected' });
-    const { number, message } = req.body;
-    if (!number || !message) return res.status(400).json({ error: 'Missing number or message' });
+    
+    const { number, message, imageUrl } = req.body;
+    
+    if (!number) return res.status(400).json({ error: 'Missing number' });
+    
     const jid = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+    // If imageUrl is provided, send image message
+    if (imageUrl) {
+      let imageBuffer;
+      
+      // Try HTTPS first, then HTTP fallback
+      try {
+        imageBuffer = await fetchImageBuffer(imageUrl, imageUrl.replace(/^https:\/\//i, 'http://'));
+      } catch (error) {
+        console.error(`[${sid}] ❌ Failed to fetch image:`, error.message);
+        return res.status(400).json({ error: 'Failed to fetch image from URL' });
+      }
+
+      if (!imageBuffer) {
+        return res.status(400).json({ error: 'Could not retrieve image from URL' });
+      }
+
+      await ses.sock.sendMessage(jid, {
+        image: imageBuffer,
+        caption: message || '',
+        mimetype: 'image/jpeg' // You might want to detect this dynamically
+      });
+      
+      return res.json({ 
+        success: true, 
+        sid, 
+        to: number, 
+        type: 'image',
+        caption: message || '',
+        imageUrl: imageUrl 
+      });
+    }
+    
+    // Otherwise send text message
+    if (!message) return res.status(400).json({ error: 'Missing message for text message' });
+    
     await ses.sock.sendMessage(jid, { text: message });
-    return res.json({ success: true, sid, to: number, message });
+    return res.json({ success: true, sid, to: number, type: 'text', message });
+    
   } catch (err) {
     console.error(`[${sid}] send error`, err);
     return res.status(500).json({ error: err.message });
   }
 });
+
 
 app.post('/:sid/send-custom', async (req, res) => {
   const sid = req.params.sid;
