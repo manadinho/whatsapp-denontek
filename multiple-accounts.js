@@ -369,7 +369,9 @@ async function startSockFor(sid) {
                 text = transcription.text;
 
                 // cleanup temp files
-                fs.unlinkSync(oggPath);
+                if (fs.existsSync(oggPath)) {
+                    fs.unlinkSync(oggPath);
+                }
                 console.log(`[${sid}] 📝 Transcribed audio message:`, text);
 
                 // make api call to convert urdu text to roman english
