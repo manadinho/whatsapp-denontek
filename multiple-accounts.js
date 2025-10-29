@@ -408,12 +408,16 @@ function convertUrduToRoman(text) {
         "model": "deepseek-v3.1:671b-cloud",
         "messages": [
             {
-            "role": "system",
-            "content": "You are a bilingual Urdu–English expert. When the user sends Urdu text, OUTPUT ONLY Roman Urdu (Urdu written in English letters). Do NOT add translations, explanations, parentheses, or extra text."
+                "role": "system",
+                "content": "You are an expert linguist fluent in both Urdu and English. Your task is to convert any incoming Urdu or mixed Urdu–English text into *natural Roman Urdu* — Urdu written using English letters. \
+                Preserve meaning and context even if the input is partially incorrect or mistranscribed. \
+                If the Urdu part is unclear, infer the most likely intended Urdu meaning and write it correctly in Roman Urdu. \
+                Do NOT translate to English or explain anything. \
+                Do NOT add brackets, notes, or transliteration guides — only output clean, conversational Roman Urdu as people naturally write in chat."
             },
             {
-            "role": "user",
-            "content": `${text}`
+                "role": "user",
+                "content": `${text}`
             }
         ],
         "stream": false,

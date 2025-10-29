@@ -160,6 +160,7 @@ function flushLogsFor(sid) {
  * @returns {{removed:string[], errors:Array<{name:string,error:string}>}}
  */
 function cleanTempDrainDirs() {
+    return; // TEMP DISABLE CLEANUP
   ensureDir(ROOT_DIR);
   const removed = [];
   const errors = [];
