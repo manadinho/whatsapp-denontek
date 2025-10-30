@@ -413,6 +413,7 @@ function convertUrduToRoman(text) {
                 Preserve meaning and context even if the input is partially incorrect or mistranscribed. \
                 If the Urdu part is unclear, infer the most likely intended Urdu meaning and write it correctly in Roman Urdu. \
                 Do NOT translate to English or explain anything. \
+                Please use amount and numbers in numbers format. \
                 Do NOT add brackets, notes, or transliteration guides — only output clean, conversational Roman Urdu as people naturally write in chat."
             },
             {
