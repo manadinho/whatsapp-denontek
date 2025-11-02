@@ -18,12 +18,13 @@ app.use(express.json());
 
 const fs = require('fs');
 const path = require('path');
+const { imranHandler } = require('./imran');
 
 const rules = JSON.parse(fs.readFileSync(path.join(__dirname, 'rules.json')));
 const citiesText = fs.readFileSync(path.join(__dirname, 'cities.txt'), 'utf-8');
 
 // === multi-session config ===
-const SESSION_IDS = ['farhan', 'amber', 'rubaisha'];          // your two accounts
+const SESSION_IDS = ['farhan', 'amber', 'rubaisha', 'imran'];          // your two accounts
 const SESSION_PREFIX = 'auth_info_baileys';  // base name; real folder is `${SESSION_PREFIX}_${sid}`
 const DEFAULT_SID = 'farhan';                   // legacy endpoints map to this
 
@@ -43,6 +44,7 @@ const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
 const SERVER_BASE_URL = "http://staging.denontek.com.pk";
 const DEN_API_KEY = "denapi4568";
 const LOCAL_AI_URL = "https://d5051ef50a23.ngrok-free.app";
+const AI_URL = "http://165.22.243.143/ai/api/chat";
 
 
 // ==== per-session containers ====
@@ -162,6 +164,30 @@ async function startSockFor(sid) {
         // const messageType = Object.keys(msg.message)[0];
         const content = extractMessageContent(msg.message || {}) || {};
         const messageType = getContentType(content) || 'unknown';
+
+        let text = '';
+        if (messageType === 'conversation') {
+            text = msg.message.conversation;
+        } else if (messageType === 'extendedTextMessage') {
+            text = msg.message.extendedTextMessage.text;
+        }
+
+        if (sid === 'imran') {
+            // call your dedicated handler and stop here
+            await imranHandler({
+                ses,
+                sock,
+                sid,
+                msg,
+                sender,
+                isOutgoing,
+                text,
+                messageType,
+                messageTimestamp,
+            });
+            return; // DO NOT continue with shared logic
+        }
+
         // 🚫 ignore groups & newsletters & broadcast/status
         if (
             isJidGroup(sender) ||
@@ -173,13 +199,6 @@ async function startSockFor(sid) {
             sender === 'status@broadcast'
         ) {
             return;
-        }
-
-        let text = '';
-        if (messageType === 'conversation') {
-            text = msg.message.conversation;
-        } else if (messageType === 'extendedTextMessage') {
-            text = msg.message.extendedTextMessage.text;
         }
 
         // if message is campaign message, ignore it
@@ -432,9 +451,13 @@ function convertUrduToRoman(text) {
         let config = {
             method: 'post',
             maxBodyLength: Infinity,
-            url: LOCAL_AI_URL+'/api/chat',
+            url: AI_URL,
             headers: { 
                 'Content-Type': 'application/json'
+            },
+            auth: {
+                username: 'imran_israr',
+                password: 'Manadinho786#' // MOVE TO ENV
             },
             data : data
         };
