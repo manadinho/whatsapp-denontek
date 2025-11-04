@@ -29,7 +29,7 @@ const SESSION_PREFIX = 'auth_info_baileys';  // base name; real folder is `${SES
 const DEFAULT_SID = 'farhan';                   // legacy endpoints map to this
 
 // CHECK_NUMBER rule is to check all inquiries against a number
-const customRules = ['i1', 'i2', 's1', 'c1', 'c2', 'c3', '???']; // c1 = start campaign (Farhan only)
+const customRules = ['i1', 'i2', 's1', 'c1', 'c2', 'c3', '???', 'save-inq']; // c1 = start campaign (Farhan only)
 const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940', '923176063820']; // w/o @s.whatsapp.net
 const AGENTS_NUMBERS = ['923143637459', '923008620417']; // w/o @s.whatsapp.net
 const AGENTS_NUMBERS_WITH_SESSIONS_IDS = {
@@ -211,6 +211,55 @@ async function startSockFor(sid) {
         if (customRules.includes(textFirstValue)) {
             await sock.readMessages([msg.key]);
             await sock.sendPresenceUpdate('composing', sender);
+
+            if(textFirstValue == 'save-inq') {
+              const msgArr = (text || '').split('\n');
+              // Normalize
+              const parts = msgArr.map(s => s.trim());
+
+              // AgentId (order-agnostic, forgiving spaces/case)
+              const agentPart = parts.find(s => /^agentid\s*:/i.test(s));
+              const agentId = agentPart ? agentPart.replace(/^agentid\s*:\s*/i, '') : null;
+
+              // _token part
+              const tokenPart = parts.find(s => /^_token\s*:/i.test(s));
+              const token = tokenPart ? tokenPart.replace(/^_token\s*:\s*/i, '') : null;
+
+              // Inquiries JSON
+              const inqPart = parts.find(s => /^inquiries\s*:/i.test(s));
+              let inquiries = [];
+              if (inqPart) {
+                const jsonStr = inqPart.replace(/^inquiries\s*:\s*/i, '');
+                try {
+                  inquiries = JSON.parse(jsonStr);
+                } catch (e) {
+                  console.error('Invalid inquiries JSON:', e);
+                  await sock.sendMessage(sender, { text: '❌ Invalid inquiries JSON format.' });
+                  await sock.sendPresenceUpdate('paused', sender);
+                  return;
+                }
+              }
+
+              console.log({ token, agentId, inquiries });
+
+              submitInquiries(token, agentId, inquiries)
+                .then(async (response) => {
+                  if(response) {
+                    console.log('Inquiries submitted successfully:', response);
+                    await sock.sendMessage(sender, { text: '✅ Inquiries submitted successfully.' });
+                  } else {
+                    console.error('Error submitting inquiries: Invalid response');
+                    await sock.sendMessage(sender, { text: '❌ Error submitting inquiries.' });
+                  }
+                })
+                .catch(async (error) => {
+                  console.error('Error submitting inquiries:', error);
+                  await sock.sendMessage(sender, { text: '❌ Error submitting inquiries.' });
+                });
+
+                await sock.sendPresenceUpdate('paused', sender);
+                return;
+            }
 
             if (textFirstValue === '???') {
                 const helpText = `*Available Commands:*\n\n` +
@@ -801,6 +850,42 @@ function normalize(s) {
 }
 function isUnsubscribeFooter(text) {
   return UNSUB_RE.test(normalize(text));
+}
+
+async function submitInquiries(token, agentId, inquiries) {
+  // Ensure inquiries is a JSON string
+  const inqStr = (typeof inquiries === 'string') ? inquiries : JSON.stringify(inquiries);
+
+  const payload = new URLSearchParams();
+  payload.append('_token', token);
+  payload.append('agentCode', agentId);
+  payload.append('inquiries', inqStr);
+
+  try {
+    const res = await axios.post(`${SERVER_BASE_SECURE_URL}/den-inquiry`, payload, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        "x-den-api-key": DEN_API_KEY
+      },
+      timeout: 15000,
+      validateStatus: () => true, // we’ll decide success ourselves
+    });
+
+    // success only for 2xx
+    return res.status >= 200 && res.status < 300;
+  } catch (err) {
+    const res = await axios.post(`${SERVER_BASE_URL}/den-inquiry`, payload, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        "x-den-api-key": DEN_API_KEY
+      },
+      timeout: 30000,
+      validateStatus: () => true, // we’ll decide success ourselves
+    });
+
+    // success only for 2xx
+    return res.status >= 200 && res.status < 300;
+  }
 }
 
 // ===== routes =====
