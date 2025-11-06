@@ -6,7 +6,7 @@ const axios = require('axios');
 const https = require('https');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
-const { logMessage, drainAll, flushLogsFor, cleanTempDrainDirs } = require('./conv-logger');
+const { logMessage, drainAll, flushLogsFor, cleanTempDrainDirs, getRecordsBySidAndNumber, deleteRecordsBySidAndNumber } = require('./conv-logger');
 const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
 const OpenAI = require('openai');
 const openai = new OpenAI({
@@ -1152,6 +1152,7 @@ app.post('/start-campaign', async (req, res) => {
 
 // Export & Flush all conversations of all agents
 app.get('/export-conversations', async (req, res) => {
+  return; // depricated
   try {
     // const apiKey = req.headers['x-den-api-key'];
     // if (apiKey !== DEN_API_KEY) {
@@ -1188,6 +1189,58 @@ app.get('/export-conversations', async (req, res) => {
     console.error('export-conversations error:', e);
     return res.status(500).json({ success: false, message: e.message });
   }
+});
+
+app.post('/:sid/get-messages', (req, res) => {
+  try {
+    const sid = req.params.sid;
+    const apiKey = req.headers['x-den-api-key'];
+    if (apiKey !== DEN_API_KEY) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    const { phone_number } = req.body;
+    if (!phone_number) {
+        return res.json({ success: false, message: 'Missing phone_number' });
+    }
+
+    const rows = getRecordsBySidAndNumber(sid, phone_number);
+    // last 100 messages, newest first
+    //const last100 = getRecordsBySidAndNumber('farhan', '923001234567', { order: 'DESC', limit: 100 });
+
+    return res.json({
+      success: true,
+      message: 'Messages retrieved successfully',
+      data: {messages: rows},
+    });
+  } catch (e) {
+    console.error('get-messags error:', e);
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+app.post('/:sid/delete-messages', async (req, res) => {
+    try {
+        const sid = req.params.sid;
+        const apiKey = req.headers['x-den-api-key'];
+        if (apiKey !== DEN_API_KEY) {
+            return res.status(403).json({ success: false, message: 'Forbidden' });
+        }
+
+        const { phone_number } = req.body;
+        if (!phone_number) {
+            return res.json({ success: false, message: 'Missing phone_number' });
+        }
+
+        const result = deleteRecordsBySidAndNumber(sid, phone_number);
+        return res.json({
+        success: true,
+        message: 'Messages deleted successfully',
+        data: result,
+        });
+    } catch (e) {
+        console.error('delete-messages error:', e);
+        return res.status(500).json({ success: false, message: e.message });
+    }
 });
 
 // ===== Boot: try to auto-start both sessions if auth folders exist =====

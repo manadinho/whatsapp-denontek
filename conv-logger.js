@@ -1,113 +1,190 @@
-// conv-logger.js
-const fs = require('fs');
+// conv-logger-sqlite.js
 const path = require('path');
+const fs = require('fs');
+const Database = require('better-sqlite3');
 
-const ROOT_DIR = path.join(__dirname, 'conversations');
+// === DB setup ===
+const DATA_DIR = path.join(__dirname, 'conversations');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-function ensureDir(p) {
-  fs.mkdirSync(p, { recursive: true });
-}
+const DB_FILE = path.join(DATA_DIR, 'conversations.sqlite');
+const db = new Database(DB_FILE, { fileMustExist: false, timeout: 5000 });
 
+// Pragmas for reliability + speed under typical single-process usage
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+db.pragma('foreign_keys = ON');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS messages (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  sid      TEXT    NOT NULL,                 -- session/agent id (e.g., 'amber')
+  jid      TEXT    NOT NULL,                 -- full JID  e.g. '92300...@s.whatsapp.net'
+  number   TEXT    NOT NULL,                 -- number only e.g. '92300...'
+  dir      TEXT    NOT NULL CHECK (dir IN ('in','out')),
+  text     TEXT    NOT NULL,
+  ts       INTEGER NOT NULL,                 -- timestamp (ms)
+  iso      TEXT    NOT NULL                  -- ISO string (UTC)
+);
+
+-- helpful indexes
+CREATE INDEX IF NOT EXISTS idx_messages_sid_number_ts ON messages(sid, number, ts);
+CREATE INDEX IF NOT EXISTS idx_messages_sid_ts         ON messages(sid, ts);
+CREATE INDEX IF NOT EXISTS idx_messages_sid_dir_ts     ON messages(sid, dir, ts);
+`);
+
+// === helpers ===
 function normalizeJid(jidOrNumber) {
-  // keep full JID if provided; else convert to JID
   const jid = jidOrNumber.includes('@') ? jidOrNumber : `${jidOrNumber}@s.whatsapp.net`;
-  // file-safe key (strip domain for filename)
   const number = jid.replace('@s.whatsapp.net', '');
   return { jid, number };
 }
 
-function line(record) {
-  // safe stringify without newlines
-  return JSON.stringify(record) + '\n';
-}
+const insertStmt = db.prepare(`
+  INSERT INTO messages (sid, jid, number, dir, text, ts, iso)
+  VALUES (@sid, @jid, @number, @dir, @text, @ts, @iso)
+`);
+
+const selectConvStmt = db.prepare(`
+  SELECT sid, jid, number, dir, text, ts, iso
+  FROM messages
+  WHERE sid = ? AND number = ?
+  ORDER BY ts ASC
+`);
+
+const listNumbersStmt = db.prepare(`
+  SELECT DISTINCT number
+  FROM messages
+  WHERE sid = ?
+  ORDER BY number ASC
+`);
+
+const selectAllBySidStmt = db.prepare(`
+  SELECT number, sid, jid, dir, text, ts, iso
+  FROM messages
+  WHERE sid = ?
+  ORDER BY number ASC, ts ASC
+`);
+
+const deleteAllBySidStmt = db.prepare(`
+  DELETE FROM messages WHERE sid = ?
+`);
+
+const selectBySidNumberAsc  = db.prepare(`
+  SELECT sid, jid, number, dir, text, ts, iso
+  FROM messages
+  WHERE sid = ? AND number = ?
+  ORDER BY ts ASC
+`);
+const selectBySidNumberDesc = db.prepare(`
+  SELECT sid, jid, number, dir, text, ts, iso
+  FROM messages
+  WHERE sid = ? AND number = ?
+  ORDER BY ts DESC
+`);
+
+const countBySidNumberStmt = db.prepare(`
+  SELECT COUNT(*) AS c FROM messages WHERE sid = ? AND number = ?
+`);
+const deleteBySidNumberStmt = db.prepare(`
+  DELETE FROM messages WHERE sid = ? AND number = ?
+`);
+
+// === public API (kept compatible with your old module) ===
 
 /**
- * Append a message to agent/number file
- * @param {string} sid       - agent/session id (e.g., 'amber')
- * @param {'in'|'out'} dir   - direction
- * @param {string} jidOrNum  - JID or number (e.g., '92300...@s.whatsapp.net' or '92300...')
- * @param {string} text      - message text (no media)
- * @param {number} [tsMs]    - timestamp ms (default: Date.now())
+ * Append a message (same signature you already use).
  */
 function logMessage(sid, dir, jidOrNum, text, tsMs = Date.now()) {
+    console.log('====[conv-logger-sqlite] logMessage called:', { sid, dir, jidOrNum, text, tsMs });
   try {
     const { jid, number } = normalizeJid(jidOrNum);
-    const agentDir = path.join(ROOT_DIR, sid);
-    ensureDir(agentDir);
-
-    const file = path.join(agentDir, `${number}.jsonl`);
-    const rec = {
+    const result = insertStmt.run({
+      sid,
+      jid,
+      number,
+      dir,
+      text: String(text ?? ''),
       ts: tsMs,
       iso: new Date(tsMs).toISOString(),
-      dir,                // 'in' or 'out'
-      jid,                // full JID
-      text: String(text ?? '')
-    };
-    fs.appendFileSync(file, line(rec), 'utf8');
+    });
+    console.log('====[conv-logger-sqlite] logMessage result:', result);
   } catch (e) {
-    console.error(`[conv-logger] logMessage error:`, e.message);
+    console.error('====[conv-logger-sqlite] logMessage error:', e.message);
   }
 }
 
-/** Read full conversation for an agent+number (returns newest-last) */
+/**
+ * Return full conversation for an agent+number (newest last).
+ */
 function readConversation(sid, jidOrNum) {
   try {
     const { number } = normalizeJid(jidOrNum);
-    const file = path.join(ROOT_DIR, sid, `${number}.jsonl`);
-    if (!fs.existsSync(file)) return [];
-    const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
-    return lines.filter(Boolean).map(l => JSON.parse(l));
+    return selectConvStmt.all(sid, number);
   } catch (e) {
-    console.error(`[conv-logger] readConversation error:`, e.message);
+    console.error('[conv-logger-sqlite] readConversation error:', e.message);
     return [];
   }
 }
 
-/** List all numbers that have logs for an agent */
+/**
+ * List all numbers that have logs for an agent.
+ */
 function listNumbers(sid) {
   try {
-    const dir = path.join(ROOT_DIR, sid);
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir)
-      .filter(f => f.endsWith('.jsonl'))
-      .map(f => f.replace(/\.jsonl$/, ''));
-  } catch { return []; }
-}
-
-/** Atomically move an agent folder out, read it, then delete it (flush). */
-function drainAgent(sid) {
-  ensureDir(ROOT_DIR);
-  const agentDir = path.join(ROOT_DIR, sid);
-  if (!fs.existsSync(agentDir)) return { data: {}, conversations: 0, messages: 0 };
-
-  const tmpDir = path.join(ROOT_DIR, `.drain_${sid}_${Date.now()}`);
-  // Atomic swap: move the active dir away so writers immediately use a fresh dir
-  fs.renameSync(agentDir, tmpDir);
-  ensureDir(agentDir); // recreate empty live dir
-
-  const result = {};
-  let convCount = 0, msgCount = 0;
-
-  const files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.jsonl'));
-  for (const f of files) {
-    const number = f.replace(/\.jsonl$/, '');
-    const full = path.join(tmpDir, f);
-    const raw = fs.readFileSync(full, 'utf8').trim();
-    if (!raw) { result[number] = []; continue; }
-    const arr = raw.split('\n').filter(Boolean).map(l => JSON.parse(l));
-    result[number] = arr;
-    convCount += 1;
-    msgCount += arr.length;
+    return listNumbersStmt.all(sid).map(r => r.number);
+  } catch (e) {
+    console.error('[conv-logger-sqlite] listNumbers error:', e.message);
+    return [];
   }
-
-//   fs.rmSync(tmpDir, { recursive: true, force: true });
-  return { data: result, conversations: convCount, messages: msgCount };
 }
 
-/** Drain all agents provided, return aggregated payload. */
+/**
+ * Atomically drain one agent’s logs and return { data, conversations, messages }.
+ * Shape matches your previous return to keep /export-conversations working.
+ * data = { [number]: Array<messageRecord> }
+ */
+function drainAgent(sid) {
+  try {
+    const rows = selectAllBySidStmt.all(sid);
+    if (rows.length === 0) return { data: {}, conversations: 0, messages: 0 };
+
+    // Group by number
+    const data = {};
+    let conversations = 0;
+    let messages = 0;
+
+    for (const r of rows) {
+      if (!data[r.number]) { data[r.number] = []; conversations += 1; }
+      data[r.number].push({
+        ts: r.ts,
+        iso: r.iso,
+        dir: r.dir,
+        jid: r.jid,
+        text: r.text,
+      });
+      messages += 1;
+    }
+
+    const tx = db.transaction(() => {
+      deleteAllBySidStmt.run(sid);
+    });
+    tx();
+
+    return { data, conversations, messages };
+  } catch (e) {
+    console.error('[conv-logger-sqlite] drainAgent error:', e.message);
+    return { data: {}, conversations: 0, messages: 0 };
+  }
+}
+
+/**
+ * Drain all agents and return { payload, totals }.
+ */
 function drainAll(agents = []) {
   const payload = {};
-  let totalConvs = 0, totalMsgs = 0;
+  let totalConvs = 0;
+  let totalMsgs = 0;
 
   for (const sid of agents) {
     const { data, conversations, messages } = drainAgent(sid);
@@ -115,73 +192,86 @@ function drainAll(agents = []) {
     totalConvs += conversations;
     totalMsgs += messages;
   }
-
   return { payload, totals: { conversations: totalConvs, messages: totalMsgs } };
 }
 
 /**
- * Atomically flush (delete) all logs for a single agent/session (sid).
- * Safe under concurrency: swaps the live dir out, recreates empty dir, then deletes the old one.
- * @returns {{sid:string, ok:boolean, removedFiles:number}} stats
+ * Flush all logs for a single agent/session (sid).
+ * Returns { sid, ok, removedFiles } — we keep the same shape; removedFiles = rows deleted.
  */
 function flushLogsFor(sid) {
   try {
-    ensureDir(ROOT_DIR);
-    const agentDir = path.join(ROOT_DIR, sid);
-    if (!fs.existsSync(agentDir)) {
-      return { sid, ok: true, removedFiles: 0 };
-    }
-
-    const tmpDir = path.join(ROOT_DIR, `.flush_${sid}_${Date.now()}`);
-    // Move current dir away so writers immediately start using a fresh dir
-    fs.renameSync(agentDir, tmpDir);
-    // Recreate an empty live dir
-    ensureDir(agentDir);
-
-    // Count files for reporting (optional)
-    let removedFiles = 0;
-    try {
-      removedFiles = fs.readdirSync(tmpDir).length;
-    } catch {}
-
-    // Remove old data
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-
-    return { sid, ok: true, removedFiles };
+    const info = db.prepare('SELECT COUNT(*) AS c FROM messages WHERE sid = ?').get(sid);
+    const tx = db.transaction(() => deleteAllBySidStmt.run(sid));
+    tx();
+    return { sid, ok: true, removedFiles: info.c };
   } catch (e) {
-    console.error(`[conv-logger] flushLogsFor error (${sid}):`, e.message);
+    console.error('[conv-logger-sqlite] flushLogsFor error:', e.message);
     return { sid, ok: false, removedFiles: 0 };
   }
 }
 
 /**
- * Remove all temporary drain/flush folders under conversations/
- * Matches names starting with ".drain_" or ".flush_".
- * @returns {{removed:string[], errors:Array<{name:string,error:string}>}}
+ * No-op for SQLite; retained for API compatibility with your caller.
  */
 function cleanTempDrainDirs() {
-    return; // TEMP DISABLE CLEANUP
-  ensureDir(ROOT_DIR);
-  const removed = [];
-  const errors = [];
-
-  const entries = fs.readdirSync(ROOT_DIR, { withFileTypes: true });
-  for (const ent of entries) {
-    if (!ent.isDirectory()) continue;
-    const name = ent.name;
-    if (!name.startsWith('.drain_')) continue;
-
-    const full = path.join(ROOT_DIR, name);
-    try {
-      // safety: ensure path is inside ROOT_DIR
-      if (!full.startsWith(ROOT_DIR)) throw new Error('unsafe path');
-      fs.rmSync(full, { recursive: true, force: true });
-      removed.push(name);
-    } catch (e) {
-      errors.push({ name, error: e.message });
-    }
-  }
-  return { removed, errors };
+  return; // nothing to clean with SQLite
 }
 
-module.exports = { logMessage, readConversation, listNumbers, drainAgent, drainAll, flushLogsFor, cleanTempDrainDirs };
+/**
+ * Get every record for a specific sid + number.
+ * @param {string} sid
+ * @param {string} number   e.g. '923001234567' (no @s.whatsapp.net)
+ * @param {{order?: 'ASC'|'DESC', limit?: number, offset?: number}} [opts]
+ * @returns {Array<{sid:string,jid:string,number:string,dir:'in'|'out',text:string,ts:number,iso:string}>}
+ */
+function getRecordsBySidAndNumber(sid, number, opts = {}) {
+  const order  = (opts.order || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+  const limit  = Number.isFinite(opts.limit)  ? Math.max(0, opts.limit)  : null;
+  const offset = Number.isFinite(opts.offset) ? Math.max(0, opts.offset) : 0;
+
+  // Fast path without LIMIT/OFFSET uses precompiled statements
+  if (limit === null && offset === 0) {
+    return order === 'ASC'
+      ? selectBySidNumberAsc.all(sid, number)
+      : selectBySidNumberDesc.all(sid, number);
+  }
+
+  // Dynamic path for paging
+  const sql = `
+    SELECT sid, jid, number, dir, text, ts, iso
+    FROM messages
+    WHERE sid = ? AND number = ?
+    ORDER BY ts ${order}
+    LIMIT ${limit ?? -1} OFFSET ${offset}
+  `;
+  return db.prepare(sql).all(sid, number);
+}
+
+/**
+ * Delete all records for a specific sid + number.
+ * @returns {{sid:string, number:string, removed:number}}
+ */
+function deleteRecordsBySidAndNumber(sid, number) {
+  try {
+    const toRemove = countBySidNumberStmt.get(sid, number).c;
+    const tx = db.transaction(() => deleteBySidNumberStmt.run(sid, number));
+    tx();
+    return { sid, number, removed: toRemove };
+  } catch (e) {
+    console.error('[conv-logger-sqlite] deleteRecordsBySidAndNumber error:', e.message);
+    return { sid, number, removed: 0 };
+  }
+}
+
+module.exports = {
+  logMessage,
+  readConversation,
+  listNumbers,
+  drainAgent,
+  drainAll,
+  flushLogsFor,
+  cleanTempDrainDirs,
+  getRecordsBySidAndNumber,
+  deleteRecordsBySidAndNumber,
+};
