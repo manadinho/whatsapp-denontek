@@ -720,7 +720,14 @@ async function manageCampaignFor(sid, phone_numbers = []) {
         if (!participant.includes('@s.whatsapp.net')) {
             participant = participant + '@s.whatsapp.net';
         }
-        await sock.sendMessage(participant, { caption: message, image: imageBuffer });
+        const isWhatsAppUser = await sock.onWhatsApp(participant);
+        if ( isWhatsAppUser?.length && isWhatsAppUser[0]?.exists) {
+          await sock.sendMessage(participant, { caption: message, image: imageBuffer });
+        } else {
+          await ses.sock.sendMessage(`923004013334@s.whatsapp.net`, { text: `${participant} is not a whatsapp user` });
+          await ses.sock.sendMessage(`923076929940@s.whatsapp.net`, { text: `${participant} is not a whatsapp user` });
+          continue;
+        }
 
         // dynamic wait 20–50 seconds
         const waitTime = Math.floor(Math.random() * 30) + 20;
