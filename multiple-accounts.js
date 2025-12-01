@@ -721,7 +721,7 @@ async function manageCampaignFor(sid, phone_numbers = []) {
             participant = participant + '@s.whatsapp.net';
         }
         const isWhatsAppUser = await sock.onWhatsApp(participant);
-        if ( isWhatsAppUser?.length && isWhatsAppUser[0]?.exists) {
+        if ( Array.isArray(isWhatsAppUser) && isWhatsAppUser?.length && isWhatsAppUser[0]?.exists) {
           await sock.sendMessage(participant, { caption: message, image: imageBuffer });
         } else {
           await ses.sock.sendMessage(`923004013334@s.whatsapp.net`, { text: `${participant} is not a whatsapp user` });
