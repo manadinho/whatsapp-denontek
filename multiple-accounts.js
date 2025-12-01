@@ -724,6 +724,10 @@ async function manageCampaignFor(sid, phone_numbers = []) {
         if ( Array.isArray(isWhatsAppUser) && isWhatsAppUser?.length && isWhatsAppUser[0]?.exists) {
           await sock.sendMessage(participant, { caption: message, image: imageBuffer });
         } else {
+          const payload = new URLSearchParams();
+          payload.append("number", participant);
+          const endpoint = 'den-campaigns/mark-not-on-whatsapp';
+          await makeServerPostApiCall(payload, endpoint);
           await ses.sock.sendMessage(`923004013334@s.whatsapp.net`, { text: `${participant} is not a whatsapp user` });
           await ses.sock.sendMessage(`923076929940@s.whatsapp.net`, { text: `${participant} is not a whatsapp user` });
           continue;
