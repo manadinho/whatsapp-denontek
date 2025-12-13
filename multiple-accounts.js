@@ -311,7 +311,7 @@ async function startSockFor(sid) {
                 console.log('=== receiver', receiver);
                 console.log('=== ADMINS_NUMBERS', ADMINS_NUMBERS);
                 console.log('=== AGENTS_NUMBERS', AGENTS_NUMBERS);
-                if (!ADMINS_NUMBERS.includes(senderNumber) || !AGENTS_NUMBERS.includes(senderNumber)) {
+                if (!ADMINS_NUMBERS.includes(senderNumber) && !AGENTS_NUMBERS.includes(senderNumber)) {
                     await sock.sendPresenceUpdate('paused', sender);
                     await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
                     return;
