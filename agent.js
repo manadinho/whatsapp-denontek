@@ -31,8 +31,8 @@ let sock;
 let isConnected = false;
 
 const PORT = process.env.PORT || 3000;
-const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
-const SERVER_BASE_URL = "http://staging.denontek.com.pk";
+const SERVER_BASE_SECURE_URL = process.env.SERVER_BASE_URL;
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL;
 const DEN_API_KEY = "denapi4568";
 
 const CLIENTS = {}

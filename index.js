@@ -24,8 +24,8 @@ let sock;
 let isConnected = false;
 
 const PORT = process.env.PORT || 3000;
-const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
-const SERVER_BASE_URL = "http://staging.denontek.com.pk";
+const SERVER_BASE_SECURE_URL = process.env.SERVER_BASE_URL;
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL;
 const DEN_API_KEY = "denapi4568";
 
 let campaignStartedAt = '';
@@ -246,12 +246,12 @@ async function startSock() {
             }
 
             // check is this first message comming from FB ads click to WhatsApp
-            if (['What are your delivery options?', 'Hello! Can I get more info on this?', 'Can you check the price of a product?', 'Price?'].includes(text)) {
+            if (['What are your delivery options?', 'Hello! Can I get more info on this?', 'Can you check the price of a product?', 'Price?'].includes(text) && false) {
                 await sock.readMessages([msg.key]);
                 await sock.sendPresenceUpdate('composing', sender); // send typing indicator
-                const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/10600.jpeg';
-                const secondImageUrl = 'https://staging.denontek.com.pk/public/images/13200.jpeg';
-                const thirdImageUrl  = 'https://staging.denontek.com.pk/public/images/14200.jpeg';
+                const firstImageUrl  = `${SERVER_BASE_URL}/public/images/10600.jpeg`;
+                const secondImageUrl = `${SERVER_BASE_URL}/public/images/13200.jpeg`;
+                const thirdImageUrl  = `${SERVER_BASE_URL}/public/images/14200.jpeg`;
               
                 // fetch in parallel
                 const [firstImageBuffer, secondImageBuffer, thirdImageBuffer] =
@@ -608,7 +608,7 @@ app.post('/start-campaign', async (req, res) => {
 async function manageCampaign(phone_numbers = []) {
 
     try {
-        const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/campaign.jpeg';
+        const firstImageUrl  = `${SERVER_BASE_URL}/public/images/campaign.jpeg`;
         const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
 
         const message = "📢 *DENONTEK Automatic School Bell System*\n\n" +

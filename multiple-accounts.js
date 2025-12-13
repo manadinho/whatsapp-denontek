@@ -40,10 +40,9 @@ const AGENTS_NUMBERS_WITH_SESSIONS_IDS = {
 
 const PORT = process.env.PORT || 3000;
 // const SERVER_BASE_SECURE_URL = "http://192.168.1.14:8000";
-const SERVER_BASE_SECURE_URL = "https://staging.denontek.com.pk";
-const SERVER_BASE_URL = "http://staging.denontek.com.pk";
+const SERVER_BASE_SECURE_URL = process.env.SERVER_BASE_URL;
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL;
 const DEN_API_KEY = "denapi4568";
-const LOCAL_AI_URL = "https://d5051ef50a23.ngrok-free.app";
 const AI_URL = "http://165.22.243.143/ai/api/chat";
 
 
@@ -359,33 +358,6 @@ async function startSockFor(sid) {
             await sock.sendPresenceUpdate('paused', sender);
         }
 
-        // FB ads greeting special case
-        // if (text === 'Hello! Can I get more info on this?' && !isOutgoing) {
-        //     await sock.readMessages([msg.key]);
-        //     await sock.sendPresenceUpdate('composing', sender);
-        //     const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/10600.jpeg';
-        //     const secondImageUrl = 'https://staging.denontek.com.pk/public/images/13200.jpeg';
-        //     const thirdImageUrl  = 'https://staging.denontek.com.pk/public/images/14200.jpeg';
-
-        //     const [b1, b2, b3] = await Promise.all([
-        //     fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://')),
-        //     fetchImageBuffer(secondImageUrl, secondImageUrl.replace(/^https:\/\//i, 'http://')),
-        //     fetchImageBuffer(thirdImageUrl, thirdImageUrl.replace(/^https:\/\//i, 'http://')),
-        //     ]);
-
-        //     if (!b1 || !b2 || !b3) { await sock.sendPresenceUpdate('paused', sender); return; }
-
-        //     try {
-        //     await sock.sendMessage(sender, { image: b1, mimetype: 'image/jpeg', caption: 'Rs 10600/-' });
-        //     await sock.sendMessage(sender, { image: b2, mimetype: 'image/jpeg', caption: 'Rs 13200/-' });
-        //     await sock.sendMessage(sender, { image: b3, mimetype: 'image/jpeg', caption: 'Rs 14200/-' });
-        //     await sock.sendPresenceUpdate('paused', sender);
-        //     } catch {
-        //     await sock.sendPresenceUpdate('paused', sender);
-        //     return;
-        //     }
-        // }
-
         // Matched rules
         const matchedRule = rules.find(rule =>
             rule.RuleStatus === true &&
@@ -692,7 +664,7 @@ async function manageCampaignFor(sid, phone_numbers = []) {
   const sock = ses.sock;
 
   try {
-    const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/campaign.jpeg';
+    const firstImageUrl  = `${process.env.SERVER_BASE_URL}/public/images/campaign.jpeg`;
     const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
 
     const message = "📢 *DENONTEK Automatic School Bell System*\n\n" +
@@ -785,7 +757,7 @@ async function manageFollowupFor(sid, phone_numbers = []) {
   const sock = ses.sock;
 
   try {
-    const firstImageUrl  = 'https://staging.denontek.com.pk/public/images/reminder.jpeg';
+    const firstImageUrl  = `${process.env.SERVER_BASE_URL}/public/images/reminder.jpeg`;
     const imageBuffer = await fetchImageBuffer(firstImageUrl, firstImageUrl.replace(/^https:\/\//i, 'http://'));
 
     const message = `السلام علیکم،
