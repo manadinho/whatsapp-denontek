@@ -31,7 +31,7 @@ const DEFAULT_SID = 'farhan';                   // legacy endpoints map to this
 // CHECK_NUMBER rule is to check all inquiries against a number
 const customRules = ['i1', 'i2', 's1', 'c1', 'c2', 'c3', '???', 'save-inq']; // c1 = start campaign (Farhan only)
 const ADMINS_NUMBERS = ['923344778077', '923367674817', '923004013334', '923076929940', '923176063820']; // w/o @s.whatsapp.net
-const AGENTS_NUMBERS = ['923143637459', '923008620417']; // w/o @s.whatsapp.net
+const AGENTS_NUMBERS = ['923143637459', '923008620417', '923176063820']; // w/o @s.whatsapp.net
 const AGENTS_NUMBERS_WITH_SESSIONS_IDS = {
     'farhan': '923176063820',
     'amber': '923008620417',
@@ -160,6 +160,7 @@ async function startSockFor(sid) {
         }
 
         const sender = msg.key.remoteJid || '';
+        const receiver = sock.user.id || '';
         // const messageType = Object.keys(msg.message)[0];
         const content = extractMessageContent(msg.message || {}) || {};
         const messageType = getContentType(content) || 'unknown';
@@ -306,14 +307,15 @@ async function startSockFor(sid) {
                 }
 
                 let senderNumber = sender.replace('@s.whatsapp.net', '');
-                if (!ADMINS_NUMBERS.includes(senderNumber) && !AGENTS_NUMBERS.includes(senderNumber)) {
+                if (!ADMINS_NUMBERS.includes(senderNumber) || !AGENTS_NUMBERS.includes(senderNumber)) {
                     await sock.sendPresenceUpdate('paused', sender);
                     await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
                     return;
                 }
 
                 await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
-                const endpoint = 'den-campaigns/start?agent_number=' + senderNumber;
+                const campaignNumber = ADMINS_NUMBERS.includes(senderNumber) ? receiver.replace('@s.whatsapp.net', '') : senderNumber
+                const endpoint = 'den-campaigns/start?agent_number=' + campaignNumber;
                 await makeServerGetApiCall(endpoint);
                 await sock.sendPresenceUpdate('paused', sender);
                 return;
