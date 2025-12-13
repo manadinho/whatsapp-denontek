@@ -318,7 +318,8 @@ async function startSockFor(sid) {
                 }
 
                 await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
-                const campaignNumber = ADMINS_NUMBERS.includes(senderNumber) ? receiver.replace('@s.whatsapp.net', '') : senderNumber
+                const campaignNumber = ADMINS_NUMBERS.includes(senderNumber) ? receiver.replace('@s.whatsapp.net', '') : senderNumber;
+                console.log('====check this', campaignNumber)
                 const endpoint = 'den-campaigns/start?agent_number=' + campaignNumber;
                 await makeServerGetApiCall(endpoint);
                 await sock.sendPresenceUpdate('paused', sender);
