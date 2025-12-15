@@ -6,7 +6,7 @@ const axios = require('axios');
 const https = require('https');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
-const { logMessage, drainAll, flushLogsFor, cleanTempDrainDirs, getRecordsBySidAndNumber, deleteRecordsBySidAndNumber } = require('./conv-logger');
+const { logMessage, drainAll, flushLogsFor, cleanTempDrainDirs, getRecordsBySidAndNumber, deleteRecordsBySidAndNumber, markRecordsAsSynced } = require('./conv-logger');
 const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
 const OpenAI = require('openai');
 const openai = new OpenAI({
@@ -1196,6 +1196,10 @@ app.post('/:sid/get-messages', (req, res) => {
     }
 
     const rows = getRecordsBySidAndNumber(sid, phone_number);
+    
+    if(rows && rows.length > 0){
+      markRecordsAsSynced(sid, phone_number);
+    }
     // last 100 messages, newest first
     //const last100 = getRecordsBySidAndNumber('farhan', '923001234567', { order: 'DESC', limit: 100 });
 

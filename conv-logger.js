@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS messages (
   dir      TEXT    NOT NULL CHECK (dir IN ('in','out')),
   text     TEXT    NOT NULL,
   ts       INTEGER NOT NULL,                 -- timestamp (ms)
-  iso      TEXT    NOT NULL                  -- ISO string (UTC)
+  iso      TEXT    NOT NULL,                  -- ISO string (UTC)
+  isSynced  INTEGER NOT NULL DEFAULT 0        -- boolean (0 = false, 1 = true)
 );
 
 -- helpful indexes
@@ -241,11 +242,21 @@ function getRecordsBySidAndNumber(sid, number, opts = {}) {
   const sql = `
     SELECT sid, jid, number, dir, text, ts, iso
     FROM messages
-    WHERE sid = ? AND number = ?
+    WHERE sid = ? AND number = ? AND isSynced = 0
     ORDER BY ts ${order}
     LIMIT ${limit ?? -1} OFFSET ${offset}
   `;
   return db.prepare(sql).all(sid, number);
+}
+
+function markRecordsAsSynced(sid, number) {
+  const sql = `
+    UPDATE messages
+    SET isSynced = 1
+    WHERE sid = ? AND number = ? AND isSynced = 0
+  `;
+  const result = db.prepare(sql).run(sid, number);
+  return result.changes; // number of rows updated
 }
 
 /**
@@ -274,4 +285,5 @@ module.exports = {
   cleanTempDrainDirs,
   getRecordsBySidAndNumber,
   deleteRecordsBySidAndNumber,
+  markRecordsAsSynced,
 };
