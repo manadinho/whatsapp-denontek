@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, downloadContentFromMessage, isJidGroup, isJidBroadcast, isJidStatusBroadcast, isJidNewsletter, extractMessageContent, getContentType, jidNormalizedUser } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, downloadContentFromMessage, isJidGroup, isJidBroadcast, isJidStatusBroadcast, isJidNewsletter, extractMessageContent, getContentType } = require('@whiskeysockets/baileys');
 global.crypto = require('crypto').webcrypto;
 const axios = require('axios');
 const https = require('https');
@@ -158,12 +158,14 @@ async function startSockFor(sid) {
             console.log(`[${sid}] ⏳ Ignored old message:`, new Date(messageTimestamp));
             return;
         }
+// check msg.key.remoteJidAlt is not undefined then get value from it
+        let sender = msg.key.remoteJidAlt || msg.key.remoteJid || '';
+        if (!sender) return;
+        if(!sender.includes('@s.whatsapp.net')) return;
+        if (sender.includes(':')) sender = sender.split(':')[0] + '@s.whatsapp.net';
 
-        let sender = msg.key.remoteJid || '';
-        console.log('====participant', msg.key);
-        console.log('===raw sender===', sender);
-        sender = jidNormalizedUser(sender);
-        console.log('===normalized sender===', sender);
+
+        // const sender = msg.key.remoteJid || '';
         const receiver = sock.user.id || '';
         // const messageType = Object.keys(msg.message)[0];
         const content = extractMessageContent(msg.message || {}) || {};
