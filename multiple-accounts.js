@@ -166,7 +166,8 @@ async function startSockFor(sid) {
 
 
         // const sender = msg.key.remoteJid || '';
-        const receiver = sock.user.id || '';
+        let receiver = sock.user.id || '';
+        if( receiver.includes(':')) receiver = receiver.split(':')[0] + '@s.whatsapp.net';
         // const messageType = Object.keys(msg.message)[0];
         const content = extractMessageContent(msg.message || {}) || {};
         const messageType = getContentType(content) || 'unknown';
@@ -313,10 +314,6 @@ async function startSockFor(sid) {
                 }
 
                 let senderNumber = sender.replace('@s.whatsapp.net', '');
-                console.log('===senderNumber===', senderNumber);
-                console.log('===receiver===', receiver);
-                console.log('===ADMINS_NUMBERS===', ADMINS_NUMBERS);
-                console.log('===AGENTS_NUMBERS===', AGENTS_NUMBERS);
                 if (!ADMINS_NUMBERS.includes(senderNumber) && !AGENTS_NUMBERS.includes(senderNumber)) {
                     await sock.sendPresenceUpdate('paused', sender);
                     await sock.sendMessage(sender, { text: '❌ You are not authorized to start campaign.' });
@@ -324,7 +321,7 @@ async function startSockFor(sid) {
                 }
 
                 await sock.sendMessage(sender, { text: '🚀 Campaign start request received. Please wait it will start in few minutes.' });
-                const campaignNumber = ADMINS_NUMBERS.includes(senderNumber) ? receiver.split(':')[0] : senderNumber;
+                const campaignNumber = ADMINS_NUMBERS.includes(senderNumber) ? receiver.replace('@s.whatsapp.net', '') : senderNumber;
                 const endpoint = 'den-campaigns/start?agent_number=' + campaignNumber;
                 await makeServerGetApiCall(endpoint);
                 await sock.sendPresenceUpdate('paused', sender);
