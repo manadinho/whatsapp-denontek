@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, downloadContentFromMessage, isJidGroup, isJidBroadcast, isJidStatusBroadcast, isJidNewsletter, extractMessageContent, getContentType } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, downloadContentFromMessage, isJidGroup, isJidBroadcast, isJidStatusBroadcast, isJidNewsletter, extractMessageContent, getContentType, jidNormalizedUser } = require('@whiskeysockets/baileys');
 global.crypto = require('crypto').webcrypto;
 const axios = require('axios');
 const https = require('https');
@@ -159,7 +159,10 @@ async function startSockFor(sid) {
             return;
         }
 
-        const sender = msg.key.remoteJid || '';
+        let sender = msg.key.remoteJid || '';
+        console.log('===raw sender===', sender);
+        sender = jidNormalizedUser(sender);
+        console.log('===normalized sender===', sender);
         const receiver = sock.user.id || '';
         // const messageType = Object.keys(msg.message)[0];
         const content = extractMessageContent(msg.message || {}) || {};
