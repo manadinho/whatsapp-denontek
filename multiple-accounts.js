@@ -160,7 +160,7 @@ async function startSockFor(sid) {
         }
 
         let sender = msg.key.remoteJid || '';
-        console.log('====participant', msg.key.participant);
+        console.log('====participant', msg.key);
         console.log('===raw sender===', sender);
         sender = jidNormalizedUser(sender);
         console.log('===normalized sender===', sender);
