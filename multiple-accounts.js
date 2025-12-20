@@ -40,7 +40,7 @@ const AGENTS_NUMBERS_WITH_SESSIONS_IDS = {
 
 const PORT = process.env.PORT || 3000;
 // const SERVER_BASE_SECURE_URL = "http://192.168.1.14:8000";
-const SERVER_BASE_SECURE_URL = process.env.SERVER_BASE_URL;
+const SERVER_BASE_SECURE_URL = process.env.SERVER_BASE_SECURE_URL;
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL;
 const DEN_API_KEY = "denapi4568";
 const AI_URL = "http://165.22.243.143/ai/api/chat";
