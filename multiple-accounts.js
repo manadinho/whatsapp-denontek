@@ -6,7 +6,7 @@ const axios = require('axios');
 const https = require('https');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
-const { logMessage, drainAll, flushLogsFor, cleanTempDrainDirs, getRecordsBySidAndNumber, deleteRecordsBySidAndNumber, markRecordsAsSynced } = require('./conv-logger');
+const { logMessage, drainAll, flushLogsFor, cleanTempDrainDirs, getRecordsBySidAndNumber, deleteRecordsBySidAndNumber, markRecordsAsSynced, readConversation } = require('./conv-logger');
 const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
 const OpenAI = require('openai');
 const openai = new OpenAI({
@@ -1239,6 +1239,19 @@ app.post('/:sid/delete-messages', async (req, res) => {
         return res.status(500).json({ success: false, message: e.message });
     }
 });
+
+app.get('/:sid/readConversation', async (req, res) => {
+  const sid = req.params.sid;
+  // get number from query
+  const phone_number = req.query.number;
+  const rows = readConversation(sid, phone_number);
+
+  return res.json({
+    success: true,
+    message: 'Conversation read successfully',
+    data: rows,
+  });
+})
 
 // ===== Boot: try to auto-start both sessions if auth folders exist =====
 (async () => {
