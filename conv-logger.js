@@ -242,7 +242,7 @@ function getRecordsBySidAndNumber(sid, number, opts = {}) {
   const sql = `
     SELECT sid, jid, number, dir, text, ts, iso
     FROM messages
-    WHERE sid = ? AND number = ?
+    WHERE sid = ? AND number = ? AND isSynced = 0
     ORDER BY ts ${order}
     LIMIT ${limit ?? -1} OFFSET ${offset}
   `;
