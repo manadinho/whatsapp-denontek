@@ -1240,6 +1240,19 @@ app.post('/:sid/delete-messages', async (req, res) => {
     }
 });
 
+app.get('/:sid/readConversation', async (req, res) => {
+  const sid = req.params.sid;
+  // get number from query
+  const phone_number = req.query.number;
+  return res.json({ success: false, message: 'Deprecated endpoint' });
+  // const rows = readConversation(sid, phone_number);
+
+  // return res.json({
+  //   success: true,
+  //   message: 'Conversation read successfully',
+  //   data: rows,
+  // });
+})
 
 // ===== Boot: try to auto-start both sessions if auth folders exist =====
 (async () => {
