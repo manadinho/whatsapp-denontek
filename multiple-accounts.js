@@ -863,6 +863,8 @@ async function submitInquiries(token, agentId, inquiries) {
       validateStatus: () => true, // we’ll decide success ourselves
     });
 
+    console.log('==== DEBUG', res.status, res.data);
+
     // success only for 2xx
     return res.status >= 200 && res.status < 300;
   } catch (err) {
