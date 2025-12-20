@@ -1185,6 +1185,7 @@ app.get('/export-conversations', async (req, res) => {
 
 app.post('/:sid/get-messages', (req, res) => {
   try {
+    console.log('=== DEBUG: get-messages called ===');
     const sid = req.params.sid;
     const apiKey = req.headers['x-den-api-key'];
     if (apiKey !== DEN_API_KEY) {
@@ -1202,7 +1203,7 @@ app.post('/:sid/get-messages', (req, res) => {
     }
     // last 100 messages, newest first
     //const last100 = getRecordsBySidAndNumber('farhan', '923001234567', { order: 'DESC', limit: 100 });
-
+    console.log('=== DEBUG: get-messages COUNT ===', rows.length);
     return res.json({
       success: true,
       message: 'Messages retrieved successfully',
