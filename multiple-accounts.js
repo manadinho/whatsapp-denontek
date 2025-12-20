@@ -937,6 +937,19 @@ app.get('/:sid/status', (req, res) => {
   return res.json({ status: 'disconnected', sid, lastQR: ses.lastQR || null });
 });
 
+app.get('/:sid/readConversation', async (req, res) => {
+  const sid = req.params.sid;
+  // get number from query
+  const phone_number = req.query.number;
+  const rows = readConversation(sid, phone_number);
+
+  return res.json({
+    success: true,
+    message: 'Conversation read successfully',
+    data: rows,
+  });
+});
+
 app.post('/:sid/send', async (req, res) => {
   const sid = req.params.sid;
   try {
@@ -1108,6 +1121,7 @@ app.post('/:sid/start-followup', async (req, res) => {
 // === Backward compatibility endpoints (map to DEFAULT_SID = farhan) ===
 app.get('/start-session', (req, res) => res.redirect(`/${DEFAULT_SID}/start-session`));
 
+
 app.get('/status', (req, res) => {
   const ses = Sessions[DEFAULT_SID];
   if (ses?.isConnected && ses?.sock?.user) {
@@ -1239,20 +1253,6 @@ app.post('/:sid/delete-messages', async (req, res) => {
         return res.status(500).json({ success: false, message: e.message });
     }
 });
-
-app.get('/:sid/readConversation', async (req, res) => {
-  const sid = req.params.sid;
-  // get number from query
-  const phone_number = req.query.number;
-  return res.json({ success: false, message: 'Deprecated endpoint' });
-  // const rows = readConversation(sid, phone_number);
-
-  // return res.json({
-  //   success: true,
-  //   message: 'Conversation read successfully',
-  //   data: rows,
-  // });
-})
 
 // ===== Boot: try to auto-start both sessions if auth folders exist =====
 (async () => {
