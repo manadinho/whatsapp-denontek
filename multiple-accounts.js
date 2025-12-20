@@ -854,7 +854,7 @@ async function submitInquiries(token, agentId, inquiries) {
   payload.append('inquiries', inqStr);
 
   try {
-    const res = await axios.post(`${SERVER_BASE_SECURE_URL}/den-inquiry`, payload, {
+    const res = await axios.post(`${SERVER_BASE_SECURE_URL}/den-inquiry-post`, payload, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         "x-den-api-key": DEN_API_KEY
@@ -1196,7 +1196,7 @@ app.post('/:sid/get-messages', (req, res) => {
     }
 
     const rows = getRecordsBySidAndNumber(sid, phone_number);
-    
+
     if(rows && rows.length > 0){
       markRecordsAsSynced(sid, phone_number);
     }
