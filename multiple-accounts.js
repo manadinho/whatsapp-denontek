@@ -854,7 +854,7 @@ async function submitInquiries(token, agentId, inquiries) {
   payload.append('inquiries', inqStr);
 
   try {
-    const res = await axios.post(`${SERVER_BASE_SECURE_URL}/den-inquiry-post`, payload, {
+    const res = await axios.post(`${SERVER_BASE_SECURE_URL}/den-inquiry`, payload, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         "x-den-api-key": DEN_API_KEY
@@ -862,8 +862,6 @@ async function submitInquiries(token, agentId, inquiries) {
       timeout: 15000,
       validateStatus: () => true, // we’ll decide success ourselves
     });
-
-    console.log('==== DEBUG', res.status, res.data);
 
     // success only for 2xx
     return res.status >= 200 && res.status < 300;
