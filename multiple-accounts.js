@@ -762,6 +762,7 @@ async function manageCampaignFor(sid, phone_numbers = []) {
 
 // ===== Followup (session-scoped) =====
 async function manageFollowupFor(sid, phone_numbers = []) {
+  console.log('=== DEBUG: Starting follow-up for', sid, phone_numbers.length, 'numbers');
   const ses = getSes(sid);
   const sock = ses.sock;
 
@@ -801,6 +802,7 @@ Team Denontek`;
         ses.ctx.followUpSuccessCount++;
         ses.ctx.followUpSuccessNumbers.push(participant);
       } catch (error) {
+        console.log('===DEBUG Followup error', error.message);
         ses.ctx.followUpFailureCount++;
         ses.ctx.followUpFailureNumbers.push(participant);
         continue;
