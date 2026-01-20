@@ -410,7 +410,6 @@ async function startSockFor(sid) {
                 const transcription = await openai.audio.transcriptions.create({
                     file: fileForOpenAI,
                     model: 'whisper-1',
-                    translate: true,
                     language: 'ur',
                 });
             
@@ -429,6 +428,7 @@ async function startSockFor(sid) {
                     text = romanText;
                 }
             } catch (err) {
+                console.error(`[${sid}] ❌ Audio transcription error: \n`, err);
                 // send error message to admins
                 await sock.sendMessage(`923004013334@s.whatsapp.net`, { text: `**ERROR TYPE: Audio file transcript error [${sid}]**\n\n${err.message}` });
                 await sock.sendMessage(`923076929940@s.whatsapp.net`, { text: `**ERROR TYPE: Audio file transcript error [${sid}]**\n\n${err.message}` });
