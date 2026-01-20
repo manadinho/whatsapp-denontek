@@ -11,6 +11,8 @@ const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
 const OpenAI = require('openai');
 const openai = new OpenAI({
     apiKey: WHISPER_API_KEY,
+    timeout: 60000, // 60 seconds timeout
+    maxRetries: 3,  // retry up to 3 times on connection errors
 });
 
 const app = express();
@@ -404,14 +406,28 @@ async function startSockFor(sid) {
                 // 2) convert to WAV (16k mono) for best STT compatibility
                 // build a File for OpenAI directly from the OGG (no ffmpeg needed)
                 const oggBuf = await fs.promises.readFile(oggPath);
-                const fileForOpenAI = await OpenAI.toFile(oggBuf, `wa-${msg.key.id}.ogg`, { type: 'audio/ogg' });
+                let fileForOpenAI = await OpenAI.toFile(oggBuf, `wa-${msg.key.id}.ogg`, { type: 'audio/ogg' });
 
-                // 3) call OpenAI / Whisper transcription (example)
-                const transcription = await openai.audio.transcriptions.create({
-                    file: fileForOpenAI,
-                    model: 'whisper-1',
-                    language: 'ur',
-                });
+                // 3) call OpenAI / Whisper transcription with retry logic
+                let transcription;
+                const maxRetries = 3;
+                for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                        transcription = await openai.audio.transcriptions.create({
+                            file: fileForOpenAI,
+                            model: 'whisper-1',
+                            language: 'ur',
+                        });
+                        break; // success, exit loop
+                    } catch (retryErr) {
+                        console.error(`[${sid}] ⚠️ Whisper attempt ${attempt}/${maxRetries} failed:`, retryErr.message);
+                        if (attempt === maxRetries) throw retryErr;
+                        await sleep(2000 * attempt); // exponential backoff
+                        // Recreate file for retry since it may have been consumed
+                        const retryBuf = await fs.promises.readFile(oggPath);
+                        fileForOpenAI = await OpenAI.toFile(retryBuf, `wa-${msg.key.id}.ogg`, { type: 'audio/ogg' });
+                    }
+                }
             
                 // 4) reply with the transcript (or store it)
                 text = transcription.text;
