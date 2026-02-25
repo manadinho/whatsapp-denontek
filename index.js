@@ -39,7 +39,7 @@ let campaignStatus = 'not_started';
 async function startSock() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-    const version = [2, 3000, 1027934701];
+    const version = [2, 3000, 1033893291];
     return new Promise((resolve, reject) => {
         sock = makeWASocket({
             version,
